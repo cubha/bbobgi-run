@@ -1,0 +1,79 @@
+/** Game mode identifiers */
+export type GameMode = 'horse' | 'marble' | 'ladder' | 'pachinko';
+
+/** Player info */
+export interface Player {
+  id: number;
+  name: string;
+}
+
+/** Game configuration passed from MainMenu to GameScene */
+export interface GameConfig {
+  mode: GameMode;
+  players: Player[];
+  seed?: number;
+}
+
+/** Final ranking result */
+export interface RankingEntry {
+  player: Player;
+  rank: number;
+  finishTime?: number;
+}
+
+/** Game result passed from GameScene to ResultScene */
+export interface GameResult {
+  mode: GameMode;
+  rankings: RankingEntry[];
+  seed: number;
+}
+
+/** Scene lifecycle events */
+export interface SceneEvents {
+  'scene:ready': undefined;
+  'scene:destroy': undefined;
+  'game:start': GameConfig;
+  'game:end': GameResult;
+  'rank:change': { playerId: number; oldRank: number; newRank: number };
+}
+
+/** Game mode metadata for UI display */
+export interface GameModeInfo {
+  mode: GameMode;
+  title: string;
+  subtitle: string;
+  description: string;
+  recommended: boolean;
+}
+
+/** All available game modes */
+export const GAME_MODES: GameModeInfo[] = [
+  {
+    mode: 'horse',
+    title: '경마',
+    subtitle: 'Horse Racing',
+    description: '말들이 트랙을 달린다!',
+    recommended: true,
+  },
+  {
+    mode: 'marble',
+    title: '구슬 레이스',
+    subtitle: 'Marble Race',
+    description: '구슬이 물리 트랙을 굴러간다!',
+    recommended: true,
+  },
+  {
+    mode: 'ladder',
+    title: '사다리타기',
+    subtitle: 'Ladder Game',
+    description: '빠른 추첨! 사다리를 타고 내려간다',
+    recommended: false,
+  },
+  {
+    mode: 'pachinko',
+    title: '핀볼/파친코',
+    subtitle: 'Pachinko',
+    description: '공이 핀에 부딪히며 내려간다!',
+    recommended: false,
+  },
+];
