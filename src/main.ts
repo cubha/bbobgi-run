@@ -6,7 +6,12 @@ import { MarbleRaceScene } from '@scenes/games/MarbleRaceScene';
 import { LadderScene } from '@scenes/games/LadderScene';
 import { PachinkoScene } from '@scenes/games/PachinkoScene';
 import type { GameConfig, GameResult, GameMode } from './types';
-import { BaseScene } from '@core/BaseScene';
+import type { BaseScene } from '@core/BaseScene';
+
+type GameScene = BaseScene & {
+  setConfig: (c: GameConfig) => void;
+  setEndCallback: (cb: (r: GameResult) => void) => void;
+};
 
 async function main() {
   const container = document.getElementById('game-container');
@@ -15,7 +20,7 @@ async function main() {
   const app = await GameApplication.create(container);
 
   /** Create the appropriate game scene based on mode */
-  function createGameScene(mode: GameMode): BaseScene & { setConfig: (c: GameConfig) => void; setEndCallback: (cb: (r: GameResult) => void) => void } {
+  function createGameScene(mode: GameMode): GameScene {
     switch (mode) {
       case 'horse': return new HorseRaceScene();
       case 'marble': return new MarbleRaceScene();
@@ -24,9 +29,9 @@ async function main() {
     }
   }
 
-  /** Navigate to main menu */
+  /** Navigate to main menu, optionally preserving players */
   async function showMenu() {
-    const menu = new MainMenuScene();
+    const menu = new MainMenuScene(app);
     menu.setStartCallback((config: GameConfig) => {
       startGame(config);
     });
@@ -53,7 +58,7 @@ async function main() {
     await app.scenes.transition(scene);
   }
 
-  // Start with main menu
+  // Boot
   await showMenu();
 }
 

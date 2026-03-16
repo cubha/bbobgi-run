@@ -63,9 +63,24 @@ src/
 │       ├── LadderScene.ts
 │       └── PachinkoScene.ts
 │
-├── entities/             # 게임 오브젝트 (Horse, Marble, LadderLine 등)
-├── effects/              # 연출/이펙트 (SlowMotion, ShakeEffect, Commentary 등)
-├── ui/                   # UI 컴포넌트 (ModeCard, NameInput, Button 등)
+├── entities/             # 게임 오브젝트
+│   └── Horse.ts          # 말 엔티티 (갤럽 애니메이션, SeededRandom 속도)
+│
+├── effects/              # 연출/이펙트
+│   ├── CountdownEffect.ts  # 3-2-1-출발 카운트다운
+│   ├── SlowMotionEffect.ts # 결승 직전 슬로우모션 + 비네팅
+│   ├── ShakeEffect.ts      # 화면 흔들림 (순위 역전 시)
+│   ├── ChaosEffect.ts      # 카오스 이벤트 텍스트 연출
+│   └── ConfettiEffect.ts   # 1등 축하 폭죽 파티클
+│
+├── ui/                   # UI 컴포넌트
+│   ├── Button.ts           # 그래디언트 + 글로우 버튼
+│   ├── PickModeCard.ts     # 뽑기 모드 선택 카드
+│   ├── ModeCard.ts         # 게임 모드 선택 카드
+│   ├── NameInput.ts        # 참가자 이름 입력 (HTML overlay, IME 지원)
+│   ├── DotGridBackground.ts # 도트 그리드 배경 패널
+│   └── SectionLabel.ts     # 섹션 라벨 (좌측 바 + 텍스트)
+│
 └── utils/                # 유틸리티
     ├── random.ts         # 시드 기반 랜덤 (재현성/공정성)
     ├── responsive.ts     # 반응형 리사이즈
@@ -112,12 +127,15 @@ src/
 
 ## 구현 로드맵
 
-### Phase 1: MVP — 경마 모드 단독
-- [ ] 코어 시스템 구현 (Application, SceneManager, BaseScene)
-- [ ] MainMenuScene (모드 선택 UI + 이름 입력)
-- [ ] HorseRaceScene (횡스크롤, 랜덤 속도, 30초 루프)
-- [ ] ResultScene (pickMode 분기: 1등 시상식 / 꼴등 벌칙)
-- [ ] 반응형 + 모바일 터치
+### Phase 1: MVP — 경마 모드 단독 ✅
+- [x] 코어 시스템 구현 (Application, SceneManager, BaseScene)
+- [x] MainMenuScene (모드 선택 UI + 이름 입력)
+- [x] HorseRaceScene (횡스크롤, 랜덤 속도, 30초 루프)
+- [x] ResultScene (pickMode 분기: 1등 시상식 / 꼴등 벌칙)
+- [x] 반응형 + 모바일 터치
+- [x] UI 컴포넌트 시스템 (Button, PickModeCard, ModeCard, NameInput)
+- [x] 이펙트 시스템 (Countdown, SlowMotion, Shake, Chaos, Confetti)
+- [x] Neon Game Show 디자인 테마 적용
 
 ### Phase 2: 물리 모드 추가
 - [ ] PhysicsWorld.ts (Matter.js 래퍼)
