@@ -1,171 +1,248 @@
-import { Container, Text, Graphics } from 'pixi.js';
+import { Container, Graphics, Text } from 'pixi.js';
+import { gsap } from 'gsap';
 import { BaseScene } from '@core/BaseScene';
-import type { GameMode, GameConfig, Player } from '@/types';
+import type { GameApplication } from '@core/Application';
+import type { GameMode, GameConfig, Player, PickMode } from '@/types';
 import { GAME_MODES } from '@/types';
-import { COLORS, MIN_PLAYERS, MAX_PLAYERS } from '@utils/constants';
+import { COLORS, DESIGN_WIDTH, MIN_PLAYERS, FONT_DISPLAY, FONT_BODY } from '@utils/constants';
+import { Button } from '@ui/Button';
+import { PickModeCard } from '@ui/PickModeCard';
+import { ModeCard } from '@ui/ModeCard';
+import { NameInput } from '@ui/NameInput';
+import { DotGridBackground } from '@ui/DotGridBackground';
+import { SectionLabel } from '@ui/SectionLabel';
 
 /**
- * Main init screen — mode selection + name input + start button.
- * Uses HTML overlay for name input (IME-safe).
+ * Main menu scene — pick mode → game mode → name input → start.
  */
 export class MainMenuScene extends BaseScene {
-  private selectedMode: GameMode = 'horse';
+  private readonly app: GameApplication;
+  private selectedPickMode: PickMode = 'first';
+  private selectedGameMode: GameMode = 'horse';
   private players: Player[] = [];
   private onStart: ((config: GameConfig) => void) | null = null;
 
-  /** Set callback for when the game starts */
+  private pickCards: PickModeCard[] = [];
+  private modeCards: ModeCard[] = [];
+  private nameInput: NameInput | null = null;
+  private startBtn: Button | null = null;
+
+  constructor(app: GameApplication) {
+    super();
+    this.app = app;
+  }
+
   setStartCallback(cb: (config: GameConfig) => void): void {
     this.onStart = cb;
   }
 
   async init(): Promise<void> {
+    this.buildBackground();
     this.buildTitle();
-    this.buildModeCards();
-    this.buildNameInput();
+    this.buildPickModeSection();
+    this.buildGameModeSection();
+    this.buildNameInputSection();
     this.buildStartButton();
+    this.animateIn();
   }
 
   update(_delta: number): void {
-    // Menu is mostly event-driven, no per-frame updates needed
+    // event-driven; no per-frame updates
   }
 
+  override destroy(): void {
+    this.nameInput?.destroy();
+    this.nameInput = null;
+    super.destroy();
+  }
+
+  // ─── Background ──────────────────────────────
+
+  private buildBackground(): void {
+    const bg = new DotGridBackground({ showBottomBar: true });
+    this.container.addChild(bg.container);
+  }
+
+  // ─── Title ───────────────────────────────────
+
   private buildTitle(): void {
+    // Title glow backdrop
+    const titleGlow = new Graphics();
+    titleGlow.ellipse(DESIGN_WIDTH / 2, 42, 130, 32);
+    titleGlow.fill({ color: COLORS.primary, alpha: 0.08 });
+    this.container.addChild(titleGlow);
+
     const title = new Text({
-      text: '1등꼴등 게임',
+      text: '뽑기런',
       style: {
-        fontFamily: 'sans-serif',
-        fontSize: 32,
-        fontWeight: 'bold',
+        fontFamily: FONT_DISPLAY,
+        fontSize: 44,
         fill: COLORS.text,
+        dropShadow: {
+          color: COLORS.primary,
+          blur: 16,
+          distance: 0,
+          angle: 0,
+          alpha: 0.6,
+        },
       },
     });
     title.anchor.set(0.5, 0);
-    title.x = this.container.width || 195;
-    title.y = 40;
+    title.x = DESIGN_WIDTH / 2;
+    title.y = 16;
     this.container.addChild(title);
+
+    const subtitle = new Text({
+      text: '누가 당할까? 지금 뽑아보자!',
+      style: {
+        fontFamily: FONT_BODY,
+        fontSize: 13,
+        fontWeight: '700',
+        fill: COLORS.textDim,
+        letterSpacing: 1,
+      },
+    });
+    subtitle.anchor.set(0.5, 0);
+    subtitle.x = DESIGN_WIDTH / 2;
+    subtitle.y = 68;
+    this.container.addChild(subtitle);
+
+    // Decorative divider under title
+    const divider = new Graphics();
+    divider.rect(DESIGN_WIDTH / 2 - 30, 88, 60, 2);
+    divider.fill({ color: COLORS.primary, alpha: 0.5 });
+    this.container.addChild(divider);
   }
 
-  private buildModeCards(): void {
-    const cardsContainer = new Container();
-    cardsContainer.y = 100;
+  // ─── Pick Mode Section ────────────────────────
+
+  private buildPickModeSection(): void {
+    this.container.addChild(new SectionLabel({ text: '뽑기 모드', y: 96 }).container);
+
+    const picksContainer = new Container();
+    picksContainer.y = 114;
+    picksContainer.x = 8;
+
+    const modes: PickMode[] = ['first', 'last'];
+    modes.forEach((mode, i) => {
+      const card = new PickModeCard({
+        pickMode: mode,
+        selected: mode === this.selectedPickMode,
+        onClick: (m) => this.selectPickMode(m),
+      });
+      card.container.x = i * 187 + 3;
+      picksContainer.addChild(card.container);
+      this.pickCards.push(card);
+    });
+
+    this.container.addChild(picksContainer);
+  }
+
+  private selectPickMode(mode: PickMode): void {
+    this.selectedPickMode = mode;
+    this.pickCards.forEach((c, i) =>
+      c.setSelected((['first', 'last'] as PickMode[])[i] === mode),
+    );
+  }
+
+  // ─── Game Mode Section ────────────────────────
+
+  private buildGameModeSection(): void {
+    this.container.addChild(new SectionLabel({ text: '게임 모드', y: 290 }).container);
+
+    const modesContainer = new Container();
+    modesContainer.y = 308;
+    modesContainer.x = 8;
 
     GAME_MODES.forEach((modeInfo, index) => {
       const col = index % 2;
       const row = Math.floor(index / 2);
-      const card = this.createModeCard(modeInfo.mode, modeInfo.title, modeInfo.subtitle, modeInfo.recommended);
-      card.x = col * 185 + 15;
-      card.y = row * 160;
-      cardsContainer.addChild(card);
-    });
-
-    this.container.addChild(cardsContainer);
-  }
-
-  private createModeCard(mode: GameMode, title: string, subtitle: string, recommended: boolean): Container {
-    const card = new Container();
-    card.eventMode = 'static';
-    card.cursor = 'pointer';
-
-    const isSelected = mode === this.selectedMode;
-
-    const bg = new Graphics();
-    bg.roundRect(0, 0, 170, 140, 12);
-    bg.fill({ color: isSelected ? COLORS.secondary : COLORS.accent, alpha: isSelected ? 1 : 0.6 });
-    bg.stroke({ color: isSelected ? COLORS.primary : 0x333333, width: isSelected ? 3 : 1 });
-    card.addChild(bg);
-
-    const titleText = new Text({
-      text: title,
-      style: { fontFamily: 'sans-serif', fontSize: 20, fontWeight: 'bold', fill: COLORS.text },
-    });
-    titleText.x = 15;
-    titleText.y = 50;
-    card.addChild(titleText);
-
-    const subText = new Text({
-      text: subtitle,
-      style: { fontFamily: 'sans-serif', fontSize: 12, fill: COLORS.textDim },
-    });
-    subText.x = 15;
-    subText.y = 80;
-    card.addChild(subText);
-
-    if (recommended) {
-      const badge = new Text({
-        text: '추천',
-        style: { fontFamily: 'sans-serif', fontSize: 10, fontWeight: 'bold', fill: COLORS.gold },
+      const card = new ModeCard({
+        modeInfo,
+        selected: modeInfo.mode === this.selectedGameMode,
+        active: modeInfo.mode === 'horse', // Phase 1: horse only
+        onClick: (m) => this.selectGameMode(m),
       });
-      badge.x = 15;
-      badge.y = 15;
-      card.addChild(badge);
-    }
-
-    card.on('pointertap', () => {
-      this.selectedMode = mode;
-      // Rebuild cards to reflect selection
-      const parent = card.parent;
-      if (parent) {
-        const y = parent.y;
-        this.container.removeChild(parent);
-        this.buildModeCards();
-        const newCards = this.container.children[this.container.children.length - 1];
-        if (newCards) newCards.y = y;
-      }
+      card.container.x = col * 187 + 3;
+      card.container.y = row * 138;
+      modesContainer.addChild(card.container);
+      this.modeCards.push(card);
     });
 
-    return card;
+    this.container.addChild(modesContainer);
   }
 
-  private buildNameInput(): void {
-    // TODO: Implement HTML overlay name input with chip UI
-    // For now, placeholder text
-    const placeholder = new Text({
-      text: `참가자 이름을 입력하세요 (${MIN_PLAYERS}~${MAX_PLAYERS}명)`,
-      style: { fontFamily: 'sans-serif', fontSize: 14, fill: COLORS.textDim },
-    });
-    placeholder.x = 15;
-    placeholder.y = 460;
-    this.container.addChild(placeholder);
+  private selectGameMode(mode: GameMode): void {
+    this.selectedGameMode = mode;
+    GAME_MODES.forEach((m, i) =>
+      this.modeCards[i]?.setSelected(m.mode === mode),
+    );
   }
+
+  // ─── Name Input Section ───────────────────────
+
+  private buildNameInputSection(): void {
+    this.container.addChild(new SectionLabel({ text: '참가자 입력', y: 586 }).container);
+
+    const { scale, offsetY } = this.app.scaleInfo;
+    const designY = 608;
+    const screenY = Math.round(designY * scale + offsetY);
+
+    const gameContainer = document.getElementById('game-container');
+    if (!gameContainer) return;
+
+    this.nameInput = new NameInput({
+      container: gameContainer,
+      canvasOffsetY: screenY,
+      onChange: (players) => {
+        this.players = players;
+        this.updateStartButton();
+      },
+    });
+  }
+
+  // ─── Start Button ─────────────────────────────
 
   private buildStartButton(): void {
-    const btn = new Container();
-    btn.eventMode = 'static';
-    btn.cursor = 'pointer';
-    btn.y = 700;
-    btn.x = 15;
-
-    const bg = new Graphics();
-    bg.roundRect(0, 0, 360, 56, 12);
-    bg.fill({ color: COLORS.primary });
-    btn.addChild(bg);
-
-    const label = new Text({
-      text: '시작!',
-      style: { fontFamily: 'sans-serif', fontSize: 22, fontWeight: 'bold', fill: COLORS.text },
+    const btn = new Button({
+      label: '게임 시작!',
+      width: 366,
+      height: 54,
+      color: COLORS.primary,
+      colorEnd: 0xff6080,
+      onClick: () => this.handleStart(),
     });
-    label.anchor.set(0.5);
-    label.x = 180;
-    label.y = 28;
-    btn.addChild(label);
-
-    btn.on('pointertap', () => {
-      // TODO: Validate player count >= MIN_PLAYERS
-      if (this.players.length < MIN_PLAYERS) {
-        // Temporary: add dummy players for testing
-        this.players = [
-          { id: 1, name: '플레이어1' },
-          { id: 2, name: '플레이어2' },
-          { id: 3, name: '플레이어3' },
-        ];
-      }
-
-      this.onStart?.({
-        mode: this.selectedMode,
-        players: this.players,
-      });
-    });
-
-    this.container.addChild(btn);
+    btn.container.x = 12;
+    btn.container.y = 770;
+    btn.disable();
+    this.container.addChild(btn.container);
+    this.startBtn = btn;
   }
+
+  private updateStartButton(): void {
+    if (this.players.length >= MIN_PLAYERS) {
+      this.startBtn?.enable();
+    } else {
+      this.startBtn?.disable();
+    }
+  }
+
+  private handleStart(): void {
+    if (this.players.length < MIN_PLAYERS) return;
+    this.nameInput?.destroy();
+    this.nameInput = null;
+    this.onStart?.({
+      mode: this.selectedGameMode,
+      players: this.players,
+      pickMode: this.selectedPickMode,
+    });
+  }
+
+  // ─── Entrance Animation ───────────────────────
+
+  private animateIn(): void {
+    this.container.alpha = 0;
+    gsap.to(this.container, { alpha: 1, duration: 0.35, ease: 'power2.out' });
+  }
+
 }

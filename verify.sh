@@ -15,9 +15,9 @@ PASS=0
 FAIL=0
 WARN=0
 
-pass() { ((PASS++)); echo -e "${GREEN}[PASS]${NC} $1"; }
-fail() { ((FAIL++)); echo -e "${RED}[FAIL]${NC} $1"; }
-warn() { ((WARN++)); echo -e "${YELLOW}[WARN]${NC} $1"; }
+pass() { ((++PASS)); echo -e "${GREEN}[PASS]${NC} $1"; }
+fail() { ((++FAIL)); echo -e "${RED}[FAIL]${NC} $1"; }
+warn() { ((++WARN)); echo -e "${YELLOW}[WARN]${NC} $1"; }
 
 echo "══════════════════════════════"
 echo " verify.sh — first-last-game"
@@ -34,7 +34,7 @@ fi
 echo ""
 
 # ── 2. ESLint ────────────────────────────────
-if [ "$1" != "--ts-only" ] 2>/dev/null; then
+if [ "${1:-}" != "--ts-only" ]; then
   echo "── ESLint ──"
   if npx eslint src/ --max-warnings 0 2>&1; then
     pass "eslint src/"

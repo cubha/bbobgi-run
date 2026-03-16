@@ -1,6 +1,9 @@
 /** Game mode identifiers */
 export type GameMode = 'horse' | 'marble' | 'ladder' | 'pachinko';
 
+/** Pick mode — which place to highlight in results */
+export type PickMode = 'first' | 'last';
+
 /** Player info */
 export interface Player {
   id: number;
@@ -11,6 +14,7 @@ export interface Player {
 export interface GameConfig {
   mode: GameMode;
   players: Player[];
+  pickMode: PickMode;
   seed?: number;
 }
 
@@ -26,15 +30,7 @@ export interface GameResult {
   mode: GameMode;
   rankings: RankingEntry[];
   seed: number;
-}
-
-/** Scene lifecycle events */
-export interface SceneEvents {
-  'scene:ready': undefined;
-  'scene:destroy': undefined;
-  'game:start': GameConfig;
-  'game:end': GameResult;
-  'rank:change': { playerId: number; oldRank: number; newRank: number };
+  pickMode: PickMode;
 }
 
 /** Game mode metadata for UI display */
