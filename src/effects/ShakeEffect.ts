@@ -4,6 +4,13 @@ import { gsap } from 'gsap';
 export class ShakeEffect {
   private timeline: gsap.core.Timeline | null = null;
 
+  destroy(): void {
+    if (this.timeline) {
+      this.timeline.kill();
+      this.timeline = null;
+    }
+  }
+
   shake(target: Container, amplitude: number = 5, repeats: number = 6): void {
     if (this.timeline) {
       this.timeline.kill();
