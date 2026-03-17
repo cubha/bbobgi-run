@@ -38,6 +38,6 @@ export abstract class BaseScene {
 
   /** Override to clean up resources */
   destroy(): void {
-    this.container.removeChildren();
+    this.container.removeChildren().forEach((child) => child.destroy({ children: true }));
   }
 }

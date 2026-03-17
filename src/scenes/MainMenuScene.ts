@@ -51,6 +51,7 @@ export class MainMenuScene extends BaseScene {
   }
 
   override destroy(): void {
+    gsap.killTweensOf(this.container);
     this.nameInput?.destroy();
     this.nameInput = null;
     super.destroy();

@@ -64,7 +64,8 @@ src/
 │       └── PachinkoScene.ts
 │
 ├── entities/             # 게임 오브젝트
-│   └── Horse.ts          # 말 엔티티 (갤럽 애니메이션, SeededRandom 속도)
+│   ├── Horse.ts          # 말 엔티티 (갤럽 애니메이션, SeededRandom 속도)
+│   └── Marble.ts         # 구슬 엔티티 (Matter.js body + PixiJS 동기화)
 │
 ├── effects/              # 연출/이펙트
 │   ├── CountdownEffect.ts  # 3-2-1-출발 카운트다운
@@ -137,11 +138,12 @@ src/
 - [x] 이펙트 시스템 (Countdown, SlowMotion, Shake, Chaos, Confetti)
 - [x] Neon Game Show 디자인 테마 적용
 
-### Phase 2: 물리 모드 추가
-- [ ] PhysicsWorld.ts (Matter.js 래퍼)
-- [ ] MarbleRaceScene (물리 트랙 + 구슬 충돌)
-- [ ] PachinkoScene (핀 배치 + 공 하강)
-- [ ] 공통 이펙트 시스템 (슬로우모션, 화면 흔들림, 실황 자막)
+### Phase 2: 물리 모드 추가 ✅
+- [x] PhysicsWorld.ts (Matter.js 래퍼 — 고정 timestep, 이벤트 핸들러, 센서 지원)
+- [x] MarbleRaceScene (지그재그 물리 트랙 + 구슬 충돌 + 피니시 센서)
+- [x] PachinkoScene (핀 격자 10×12 + 슬롯 센서 + 순위 결정)
+- [x] Marble 엔티티 (Matter.js body ↔ PixiJS Container 동기화)
+- [x] 공통 이펙트 시스템 (슬로우모션, 화면 흔들림, 카오스 이벤트)
 
 ### Phase 3: 사다리 + 연출 강화
 - [ ] LadderScene (사다리 생성 + 라인 추적 애니메이션)
