@@ -35,9 +35,10 @@
 | 물리 | Matter.js | 0.20.0 | 구슬/핀볼 모드 전용, PhysicsWorld 래퍼 통해 사용 |
 | 애니메이션 | GSAP | 3.12+ | PixiJS 오브젝트 직접 트윈 |
 | 사운드 | Howler.js | 2.2+ | SoundManager 래퍼 통해 사용 |
+| 로컬 DB | Dexie.js | 4.3+ | IndexedDB 래퍼 — 게임 기록/전적 저장 |
 | 번들러 | Vite | 8.x | Vanilla TypeScript (React 없음) |
 | 언어 | TypeScript | 5.9+ | strict mode, path alias |
-| 예상 번들 | **~237KB** (gzipped) | | PixiJS 180 + Matter.js 30 + GSAP 20 + Howler 7 |
+| 예상 번들 | **~250KB** (gzipped) | | PixiJS 180 + Matter.js 30 + GSAP 20 + Howler 7 + Dexie 13 |
 
 ## 디렉토리 구조
 
@@ -52,7 +53,9 @@ src/
 │   ├── BaseScene.ts      # 추상 씬 클래스 (init/update/destroy)
 │   ├── SoundManager.ts   # Howler.js 래퍼
 │   ├── InputManager.ts   # 터치/클릭 통합 입력
-│   └── PhysicsWorld.ts   # Matter.js 래퍼 (구슬/핀볼 공유)
+│   ├── PhysicsWorld.ts   # Matter.js 래퍼 (구슬/핀볼 공유)
+│   ├── RecordManager.ts  # Dexie.js 게임 기록 관리 (IndexedDB)
+│   └── BettingManager.ts # Pari-mutuel 베팅 엔진 (FSM)
 │
 ├── scenes/               # 씬(화면) 단위
 │   ├── MainMenuScene.ts  # 메인 화면 (모드 선택 + 이름 입력)
@@ -79,8 +82,11 @@ src/
 │   ├── PickModeCard.ts     # 뽑기 모드 선택 카드
 │   ├── ModeCard.ts         # 게임 모드 선택 카드
 │   ├── NameInput.ts        # 참가자 이름 입력 (HTML overlay, IME 지원)
-│   ├── DotGridBackground.ts # 도트 그리드 배경 패널
-│   └── SectionLabel.ts     # 섹션 라벨 (좌측 바 + 텍스트)
+│   ├── DotGridBackground.ts  # 도트 그리드 배경 패널
+│   ├── SectionLabel.ts      # 섹션 라벨 (좌측 바 + 텍스트)
+│   ├── StatsPanel.ts        # 전적 통계 패널 (ResultScene)
+│   ├── BettingPanel.ts      # 베팅 화면 (MainMenuScene)
+│   └── BettingResultPanel.ts # 베팅 정산 결과 (ResultScene)
 │
 └── utils/                # 유틸리티
     ├── random.ts         # 시드 기반 랜덤 (재현성/공정성)
@@ -125,6 +131,8 @@ src/
 | **Strategy** | `BaseRaceScene.ts` (예정) | 레이스형 게임 공통 로직 기반 클래스 |
 | **Observer** | 이벤트 시스템 | 순위 변동/게임 종료 이벤트 발행 → UI/이펙트 구독 |
 | **Factory** | `MainMenuScene.ts` | 선택된 모드에 따라 GameScene 인스턴스 생성 |
+| **FSM** | `BettingManager.ts` | idle → open → locked → settled 베팅 상태 관리 |
+| **Pari-mutuel** | `BettingManager.ts` | 총 베팅 풀을 승자에게 비례 분배하는 배당 정산 |
 
 ## 구현 로드맵
 
@@ -145,16 +153,20 @@ src/
 - [x] Marble 엔티티 (Matter.js body ↔ PixiJS Container 동기화)
 - [x] 공통 이펙트 시스템 (슬로우모션, 화면 흔들림, 카오스 이벤트)
 
-### Phase 3: 사다리 + 연출 강화
-- [ ] LadderScene (사다리 생성 + 라인 추적 애니메이션)
-- [ ] 사운드 시스템 (BGM + 효과음)
-- [ ] 결과 카드 이미지 생성 (SNS 공유)
-- [ ] 리플레이 기능
+### Phase 3: 사다리 + 연출 강화 ✅
+- [x] LadderScene (SeededRandom 사다리 생성 + GSAP 라인 트레이싱 애니메이션)
+- [x] SoundManager 씬 연결 (BaseScene.setSound, 주요 이벤트 훅)
+- [x] 결과 카드 공유 (Web Share API + clipboard fallback)
+- [x] 리플레이 기능 (이름 유지 + MainMenuScene 복원)
 
-### Phase 4: 확장
-- [ ] 베팅 시스템 ("누가 꼴등일까?" 예측)
-- [ ] 응원 이펙트 (터치 시 이펙트, 결과 영향 없음)
-- [ ] 연속 기록 / 명예의 전당 (로컬 저장)
+### Phase 4: 베팅/기록 확장 🔄
+- [x] RecordManager — Dexie.js IndexedDB 게임 기록 자동 저장 + 전적 통계
+- [x] BettingManager — FSM 상태관리 + Pari-mutuel 배당 정산 엔진
+- [x] StatsPanel — ResultScene 전적 통계 UI
+- [x] BettingPanel — MainMenuScene 베팅 화면 (게임 시작 전)
+- [x] BettingResultPanel — ResultScene 베팅 정산 결과 UI
+- [ ] NetworkManager — Supabase Realtime 호스트-게스트 실시간 통신
+- [ ] ReactionOverlay — 응원/리액션 이모지 오버레이 + 모바일 최적화
 
 ## 30초 게임 루프 (레이스형 공통)
 

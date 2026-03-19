@@ -1,4 +1,5 @@
 import { Container } from 'pixi.js';
+import type { SoundManager } from './SoundManager';
 
 /**
  * Abstract base class for all scenes.
@@ -6,6 +7,7 @@ import { Container } from 'pixi.js';
  */
 export abstract class BaseScene {
   readonly container: Container;
+  protected sound: SoundManager | null = null;
   private _isActive = false;
 
   constructor() {
@@ -34,6 +36,11 @@ export abstract class BaseScene {
     this._isActive = false;
     this.container.visible = false;
     this.destroy();
+  }
+
+  /** Inject SoundManager for audio hooks */
+  setSound(s: SoundManager): void {
+    this.sound = s;
   }
 
   /** Override to clean up resources */

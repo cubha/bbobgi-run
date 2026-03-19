@@ -5,6 +5,7 @@ export interface NameInputOptions {
   container: HTMLElement;
   canvasOffsetY: number;
   onChange: (players: Player[]) => void;
+  initialPlayers?: Player[];
 }
 
 const toCSS = (hex: number): string => `#${hex.toString(16).padStart(6, '0')}`;
@@ -122,6 +123,21 @@ export class NameInput {
     });
 
     this.hostContainer.appendChild(this.wrapper);
+
+    // Pre-populate with initial players (e.g., from replay)
+    if (options.initialPlayers && options.initialPlayers.length > 0) {
+      for (const player of options.initialPlayers) {
+        if (this.players.length >= MAX_PLAYERS) break;
+        this.players.push({ ...player });
+        this.nextId = Math.max(this.nextId, player.id + 1);
+        this.renderChip(player);
+      }
+      count.textContent = `${this.players.length} / ${MAX_PLAYERS}명`;
+      count.style.color = this.players.length >= MIN_PLAYERS ? '#2ecc71' : '#ff2d55';
+      this.updateInputState();
+      this.onChange([...this.players]);
+    }
+
     this.input.focus();
   }
 

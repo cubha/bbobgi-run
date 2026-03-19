@@ -33,6 +33,47 @@ export interface GameResult {
   pickMode: PickMode;
 }
 
+// ─── 기록 (Record) ───
+
+export interface GameRecord {
+  id?: number;
+  mode: GameMode;
+  pickMode: PickMode;
+  players: Player[];
+  rankings: RankingEntry[];
+  seed: number;
+  playedAt: number;
+}
+
+export interface PlayerStats {
+  name: string;
+  totalGames: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+}
+
+// ─── 베팅 (Betting) ───
+
+export type BettingPhase = 'idle' | 'open' | 'locked' | 'settled';
+
+export interface Bet {
+  bettorName: string;
+  targetPlayerId: number;
+  amount: number;
+}
+
+export interface BetSettlement {
+  bet: Bet;
+  won: boolean;
+  payout: number;
+}
+
+export interface BettingResult {
+  settlements: BetSettlement[];
+  totalPool: number;
+}
+
 /** Game mode metadata for UI display */
 export interface GameModeInfo {
   mode: GameMode;

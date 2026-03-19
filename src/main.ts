@@ -5,7 +5,7 @@ import { HorseRaceScene } from '@scenes/games/HorseRaceScene';
 import { MarbleRaceScene } from '@scenes/games/MarbleRaceScene';
 import { LadderScene } from '@scenes/games/LadderScene';
 import { PachinkoScene } from '@scenes/games/PachinkoScene';
-import type { GameConfig, GameResult, GameMode } from './types';
+import type { GameConfig, GameResult, GameMode, Player, BettingResult } from './types';
 import type { BaseScene } from '@core/BaseScene';
 
 type GameScene = BaseScene & {
@@ -29,9 +29,12 @@ async function main() {
     }
   }
 
-  /** Navigate to main menu, optionally preserving players */
-  async function showMenu() {
+  /** Navigate to main menu, optionally preserving players from a previous game */
+  async function showMenu(prevPlayers?: Player[]) {
     const menu = new MainMenuScene(app);
+    if (prevPlayers && prevPlayers.length > 0) {
+      menu.setInitialPlayers(prevPlayers);
+    }
     menu.setStartCallback((config: GameConfig) => {
       startGame(config);
     });
@@ -40,22 +43,37 @@ async function main() {
 
   /** Start a game with given config */
   async function startGame(config: GameConfig) {
+    app.betting.lockBetting();
+
     const scene = createGameScene(config.mode);
     scene.setConfig(config);
     scene.setEndCallback((result: GameResult) => {
-      showResult(result);
+      const winnerId = result.rankings.find((r) => r.rank === 1)?.player.id;
+      const bettingResult =
+        winnerId !== undefined && app.betting.hasBets
+          ? app.betting.settle(winnerId)
+          : null;
+      showResult(result, bettingResult);
     });
+    scene.setSound(app.sound);
     await app.scenes.transition(scene);
   }
 
   /** Show result screen */
-  async function showResult(result: GameResult) {
+  async function showResult(result: GameResult, bettingResult?: BettingResult | null) {
+    app.record.saveResult(result).catch(console.warn);
+
     const scene = new ResultScene();
     scene.setResult(result);
+    scene.setRecord(app.record);
+    if (bettingResult) scene.setBettingResult(bettingResult);
     scene.setReplayCallback(() => {
-      showMenu();
+      showMenu(result.rankings.map((r) => r.player));
     });
+    scene.setSound(app.sound);
     await app.scenes.transition(scene);
+
+    app.betting.reset();
   }
 
   // Boot

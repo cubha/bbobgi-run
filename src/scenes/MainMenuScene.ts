@@ -11,6 +11,7 @@ import { ModeCard } from '@ui/ModeCard';
 import { NameInput } from '@ui/NameInput';
 import { DotGridBackground } from '@ui/DotGridBackground';
 import { SectionLabel } from '@ui/SectionLabel';
+import { BettingPanel } from '@ui/BettingPanel';
 
 /**
  * Main menu scene — pick mode → game mode → name input → start.
@@ -26,6 +27,8 @@ export class MainMenuScene extends BaseScene {
   private modeCards: ModeCard[] = [];
   private nameInput: NameInput | null = null;
   private startBtn: Button | null = null;
+  private initialPlayers: Player[] = [];
+  private bettingPanel: BettingPanel | null = null;
 
   constructor(app: GameApplication) {
     super();
@@ -36,6 +39,10 @@ export class MainMenuScene extends BaseScene {
     this.onStart = cb;
   }
 
+  setInitialPlayers(players: Player[]): void {
+    this.initialPlayers = players;
+  }
+
   async init(): Promise<void> {
     this.buildBackground();
     this.buildTitle();
@@ -43,6 +50,7 @@ export class MainMenuScene extends BaseScene {
     this.buildGameModeSection();
     this.buildNameInputSection();
     this.buildStartButton();
+    this.updateStartButton();
     this.animateIn();
   }
 
@@ -54,6 +62,8 @@ export class MainMenuScene extends BaseScene {
     gsap.killTweensOf(this.container);
     this.nameInput?.destroy();
     this.nameInput = null;
+    this.bettingPanel?.destroy();
+    this.bettingPanel = null;
     super.destroy();
   }
 
@@ -161,7 +171,7 @@ export class MainMenuScene extends BaseScene {
       const card = new ModeCard({
         modeInfo,
         selected: modeInfo.mode === this.selectedGameMode,
-        active: modeInfo.mode === 'horse', // Phase 1: horse only
+        active: true,
         onClick: (m) => this.selectGameMode(m),
       });
       card.container.x = col * 187 + 3;
@@ -195,6 +205,7 @@ export class MainMenuScene extends BaseScene {
     this.nameInput = new NameInput({
       container: gameContainer,
       canvasOffsetY: screenY,
+      initialPlayers: this.initialPlayers,
       onChange: (players) => {
         this.players = players;
         this.updateStartButton();
@@ -230,8 +241,39 @@ export class MainMenuScene extends BaseScene {
 
   private handleStart(): void {
     if (this.players.length < MIN_PLAYERS) return;
+    this.showBettingPhase();
+  }
+
+  private showBettingPhase(): void {
+    // Clean up name input
     this.nameInput?.destroy();
     this.nameInput = null;
+
+    // Slide out existing UI
+    gsap.to(this.container, { alpha: 0.3, duration: 0.2, ease: 'power2.in' });
+
+    // Open betting phase
+    this.app.betting.openBetting(this.players);
+
+    const panel = new BettingPanel({
+      players: this.players,
+      bettingManager: this.app.betting,
+      onComplete: () => {
+        this.bettingPanel = null;
+        this.startGame();
+      },
+      onSkip: () => {
+        this.app.betting.reset();
+        this.bettingPanel = null;
+        this.startGame();
+      },
+    });
+
+    this.container.addChild(panel.container);
+    this.bettingPanel = panel;
+  }
+
+  private startGame(): void {
     this.onStart?.({
       mode: this.selectedGameMode,
       players: this.players,
