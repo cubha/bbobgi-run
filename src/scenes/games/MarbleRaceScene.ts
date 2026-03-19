@@ -419,6 +419,7 @@ export class MarbleRaceScene extends BaseScene {
       this.phase = 'racing';
       this.countdown = null;
       this.totalElapsed = COUNTDOWN_SEC;
+      this.sound?.play('race-start');
     });
   }
 
@@ -427,6 +428,7 @@ export class MarbleRaceScene extends BaseScene {
     this.chaosApplied = true;
     this.phase = 'chaos';
     this.setPhaseLabel('💥 카오스!');
+    this.sound?.play('chaos');
 
     this.chaos = new ChaosEffect();
     this.chaos.play(this.uiContainer, (TRACK.startY - 20) / 2 + 12);
@@ -482,6 +484,7 @@ export class MarbleRaceScene extends BaseScene {
   private enterSlowmo(): void {
     this.phase = 'slowmo';
     this.setPhaseLabel('🎬 슬로우모션');
+    this.sound?.play('slowmo');
     this.slowMo = new SlowMotionEffect(this.container);
     this.slowMo.activate(0.4);
     this.shaker.shake(this.container, 7, 10);
@@ -491,6 +494,7 @@ export class MarbleRaceScene extends BaseScene {
     if (this.phase === 'done') return;
     this.phase = 'done';
     this.slowMo?.deactivate();
+    this.sound?.play('finish');
 
     const rankings = this.buildRankings();
     this.endCallback?.({

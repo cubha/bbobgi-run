@@ -1,12 +1,22 @@
 import { Container, Text, Graphics } from 'pixi.js';
 import { gsap } from 'gsap';
 import { BaseScene } from '@core/BaseScene';
-import type { GameResult, RankingEntry } from '@/types';
+import type { GameResult, RankingEntry, BettingResult } from '@/types';
 import { COLORS, DESIGN_WIDTH, PLAYER_COLORS, FONT_DISPLAY, FONT_BODY } from '@utils/constants';
 import { Button } from '@ui/Button';
 import { ConfettiEffect } from '@effects/ConfettiEffect';
 import { DotGridBackground } from '@ui/DotGridBackground';
 import { SectionLabel } from '@ui/SectionLabel';
+import { StatsPanel } from '@ui/StatsPanel';
+import { BettingResultPanel } from '@ui/BettingResultPanel';
+import type { RecordManager } from '@core/RecordManager';
+
+const MODE_NAMES: Record<string, string> = {
+  horse: '경마',
+  marble: '구슬 레이스',
+  ladder: '사다리타기',
+  pachinko: '파친코',
+};
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -17,12 +27,24 @@ const MEDALS = ['🥇', '🥈', '🥉'];
  */
 export class ResultScene extends BaseScene {
   private result: GameResult | null = null;
+  private record: RecordManager | null = null;
+  private bettingResult: BettingResult | null = null;
   private onReplay: (() => void) | null = null;
   private tweens: gsap.core.Tween[] = [];
   private confetti: ConfettiEffect | null = null;
+  private bettingHeight = 0;
+  private statsHeight = 0;
 
   setResult(result: GameResult): void {
     this.result = result;
+  }
+
+  setRecord(record: RecordManager): void {
+    this.record = record;
+  }
+
+  setBettingResult(result: BettingResult): void {
+    this.bettingResult = result;
   }
 
   setReplayCallback(cb: () => void): void {
@@ -41,12 +63,17 @@ export class ResultScene extends BaseScene {
     if (pickMode === 'first') {
       if (winner) this.buildWinnerSection(winner.player.name);
       this.buildConfetti();
+      this.sound?.play('result-win');
     } else {
       if (loser) this.buildLoserSection(loser.player.name);
+      this.sound?.play('result-lose');
     }
 
     this.buildRankingList(rankings);
+    this.buildBettingSection();
+    await this.buildStatsSection();
     this.buildReplayButton();
+    this.buildShareButton();
   }
 
   update(_delta: number): void {
@@ -59,6 +86,8 @@ export class ResultScene extends BaseScene {
     this.confetti?.destroy();
     this.confetti = null;
     this.result = null;
+    this.record = null;
+    this.bettingResult = null;
     this.onReplay = null;
     super.destroy();
   }
@@ -324,11 +353,53 @@ export class ResultScene extends BaseScene {
     });
   }
 
+  // ─── Betting Result Section ───────────────────
+
+  private buildBettingSection(): void {
+    if (!this.bettingResult || !this.result) return;
+
+    const rankCount = this.result.rankings.length;
+    const sectionY = 224 + 22 + rankCount * 46 + 16;
+    const players = this.result.rankings.map((r) => r.player);
+
+    const panel = new BettingResultPanel({
+      bettingResult: this.bettingResult,
+      players,
+      y: sectionY,
+    });
+    this.container.addChild(panel.container);
+    this.bettingHeight = panel.height + 12;
+  }
+
+  // ─── Stats Section ────────────────────────────
+
+  private async buildStatsSection(): Promise<void> {
+    if (!this.record || !this.result) return;
+
+    const { rankings } = this.result;
+    const rankCount = rankings.length;
+    const sectionY = 224 + 22 + rankCount * 46 + 16 + this.bettingHeight;
+
+    const playerNames = rankings.map((r) => r.player.name);
+    const [playerStats, overallStats] = await Promise.all([
+      Promise.all(playerNames.map((name) => this.record!.getPlayerStats(name))),
+      this.record.getOverallStats(),
+    ]);
+
+    const panel = new StatsPanel({
+      playerStats,
+      overallStats,
+      y: sectionY,
+    });
+    this.container.addChild(panel.container);
+    this.statsHeight = panel.height + 12;
+  }
+
   // ─── Replay button ────────────────────────────
 
   private buildReplayButton(): void {
     const rankCount = this.result?.rankings.length ?? 0;
-    const listBottom = 224 + 22 + rankCount * 46 + 16;
+    const listBottom = 224 + 22 + rankCount * 46 + 16 + this.bettingHeight + this.statsHeight;
     const btnY = Math.max(listBottom, 718);
 
     const btn = new Button({
@@ -343,7 +414,6 @@ export class ResultScene extends BaseScene {
     btn.container.y = btnY;
     this.container.addChild(btn.container);
 
-    // Fade in
     btn.container.alpha = 0;
     this.tween(btn.container, {
       alpha: 1,
@@ -351,5 +421,89 @@ export class ResultScene extends BaseScene {
       delay: 0.5 + rankCount * 0.09,
       ease: 'power2.out',
     });
+  }
+
+  // ─── Share button ─────────────────────────────────────────────────
+
+  private buildShareButton(): void {
+    const rankCount = this.result?.rankings.length ?? 0;
+    const listBottom = 224 + 22 + rankCount * 46 + 16 + this.bettingHeight + this.statsHeight;
+    const replayBtnY = Math.max(listBottom, 718);
+    const btnY = replayBtnY + 64;
+
+    const btn = new Button({
+      label: '결과 공유 📤',
+      width: 366,
+      height: 46,
+      color: 0x1a3040,
+      colorEnd: 0x254a6a,
+      onClick: () => this.shareResult(),
+    });
+    btn.container.x = 12;
+    btn.container.y = btnY;
+    this.container.addChild(btn.container);
+
+    btn.container.alpha = 0;
+    this.tween(btn.container, {
+      alpha: 1,
+      duration: 0.4,
+      delay: 0.7 + rankCount * 0.09,
+      ease: 'power2.out',
+    });
+  }
+
+  private shareResult(): void {
+    if (!this.result) return;
+    const { rankings, pickMode, mode } = this.result;
+    const sorted = [...rankings].sort((a, b) => a.rank - b.rank);
+    const medals = ['🥇', '🥈', '🥉'];
+    const modeName = MODE_NAMES[mode] ?? mode;
+    const featured =
+      pickMode === 'first'
+        ? `👑 당첨: ${sorted[0]?.player.name ?? ''}`
+        : `💸 꼴등: ${sorted[sorted.length - 1]?.player.name ?? ''}`;
+
+    const lines = [
+      '뽑기런 결과 🎲',
+      `모드: ${modeName}`,
+      '',
+      ...sorted.map((r) => `${medals[r.rank - 1] ?? `${r.rank}위`} ${r.player.name}`),
+      '',
+      featured,
+    ];
+    const text = lines.join('\n');
+
+    if (typeof navigator.share === 'function') {
+      void navigator.share({ title: '뽑기런 결과', text });
+    } else {
+      void navigator.clipboard.writeText(text).then(() => {
+        this.showToast('클립보드에 복사됐어요!');
+      });
+    }
+  }
+
+  private showToast(message: string): void {
+    const toast = new Text({
+      text: message,
+      style: {
+        fontFamily: FONT_BODY,
+        fontSize: 14,
+        fontWeight: '700',
+        fill: COLORS.text,
+      },
+    });
+    toast.anchor.set(0.5);
+    toast.x = DESIGN_WIDTH / 2;
+    toast.y = 50;
+    toast.alpha = 0;
+    this.container.addChild(toast);
+
+    gsap.timeline({
+      onComplete: () => {
+        toast.destroy();
+      },
+    })
+      .to(toast, { alpha: 1, y: 40, duration: 0.3, ease: 'power2.out' })
+      .to(toast, { alpha: 0, duration: 0.4, delay: 1.2, ease: 'power2.in' });
   }
 }
