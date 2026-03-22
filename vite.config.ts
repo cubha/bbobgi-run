@@ -16,6 +16,9 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
+    watch: {
+      usePolling: true,
+    },
   },
   build: {
     target: 'ES2023',

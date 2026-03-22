@@ -19,12 +19,15 @@ export const SLOWMO_RATE = 0.3;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 10;
 
-/** Race track layout (design resolution) */
-export const RACE_TRACK = {
-  startX: 60,
-  finishX: 360,
-  topY: 120,
-  laneHeight: 64,
+/** Oval track layout for horse racing (design resolution) */
+export const OVAL_TRACK = {
+  cx: 195,         // track center x
+  cy: 400,         // track center y
+  rx: 145,         // horizontal radius
+  ry: 190,         // vertical radius
+  laneWidth: 18,   // width per lane
+  laps: 2,         // number of laps
+  hudHeight: 70,   // HUD area height at top
 } as const;
 
 /** Colors */

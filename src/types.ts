@@ -16,6 +16,7 @@ export interface GameConfig {
   players: Player[];
   pickMode: PickMode;
   seed?: number;
+  ballCount?: number;
 }
 
 /** Final ranking result */
@@ -51,27 +52,6 @@ export interface PlayerStats {
   wins: number;
   losses: number;
   winRate: number;
-}
-
-// ─── 베팅 (Betting) ───
-
-export type BettingPhase = 'idle' | 'open' | 'locked' | 'settled';
-
-export interface Bet {
-  bettorName: string;
-  targetPlayerId: number;
-  amount: number;
-}
-
-export interface BetSettlement {
-  bet: Bet;
-  won: boolean;
-  payout: number;
-}
-
-export interface BettingResult {
-  settlements: BetSettlement[];
-  totalPool: number;
 }
 
 /** Game mode metadata for UI display */

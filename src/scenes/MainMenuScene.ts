@@ -11,7 +11,6 @@ import { ModeCard } from '@ui/ModeCard';
 import { NameInput } from '@ui/NameInput';
 import { DotGridBackground } from '@ui/DotGridBackground';
 import { SectionLabel } from '@ui/SectionLabel';
-import { BettingPanel } from '@ui/BettingPanel';
 
 /**
  * Main menu scene — pick mode → game mode → name input → start.
@@ -20,15 +19,17 @@ export class MainMenuScene extends BaseScene {
   private readonly app: GameApplication;
   private selectedPickMode: PickMode = 'first';
   private selectedGameMode: GameMode = 'horse';
+  private selectedBallCount: number = 1;
   private players: Player[] = [];
   private onStart: ((config: GameConfig) => void) | null = null;
 
   private pickCards: PickModeCard[] = [];
   private modeCards: ModeCard[] = [];
+  private ballCountContainer: Container | null = null;
+  private ballCountBtns: Graphics[] = [];
   private nameInput: NameInput | null = null;
   private startBtn: Button | null = null;
   private initialPlayers: Player[] = [];
-  private bettingPanel: BettingPanel | null = null;
 
   constructor(app: GameApplication) {
     super();
@@ -48,6 +49,7 @@ export class MainMenuScene extends BaseScene {
     this.buildTitle();
     this.buildPickModeSection();
     this.buildGameModeSection();
+    this.buildBallCountSection();
     this.buildNameInputSection();
     this.buildStartButton();
     this.updateStartButton();
@@ -62,8 +64,6 @@ export class MainMenuScene extends BaseScene {
     gsap.killTweensOf(this.container);
     this.nameInput?.destroy();
     this.nameInput = null;
-    this.bettingPanel?.destroy();
-    this.bettingPanel = null;
     super.destroy();
   }
 
@@ -188,15 +188,69 @@ export class MainMenuScene extends BaseScene {
     GAME_MODES.forEach((m, i) =>
       this.modeCards[i]?.setSelected(m.mode === mode),
     );
+    if (this.ballCountContainer) {
+      this.ballCountContainer.visible = mode === 'pachinko';
+    }
+  }
+
+  // ─── Ball Count Section ───────────────────────
+
+  private buildBallCountSection(): void {
+    const ctr = new Container();
+    ctr.visible = this.selectedGameMode === 'pachinko';
+    this.container.addChild(ctr);
+    this.ballCountContainer = ctr;
+
+    ctr.addChild(new SectionLabel({ text: '공 개수', y: 584 }).container);
+
+    const counts = [1, 2, 3];
+    counts.forEach((n, i) => {
+      const bg = new Graphics();
+      bg.x = 16 + i * 110;
+      bg.y = 604;
+      bg.eventMode = 'static';
+      bg.cursor = 'pointer';
+      bg.on('pointertap', () => this.selectBallCount(n));
+      ctr.addChild(bg);
+      this.ballCountBtns.push(bg);
+
+      this.drawBallCountBtn(bg, n, n === this.selectedBallCount);
+    });
+  }
+
+  private drawBallCountBtn(bg: Graphics, n: number, selected: boolean): void {
+    bg.clear();
+    bg.roundRect(0, 0, 100, 36, 10);
+    bg.fill({ color: selected ? COLORS.primary : 0x223344, alpha: selected ? 1 : 0.7 });
+    bg.roundRect(0, 0, 100, 36, 10);
+    bg.stroke({ color: selected ? 0xff6080 : 0x445566, width: 1.5, alpha: 0.8 });
+
+    const label = new Text({
+      text: `${n}개`,
+      style: { fontFamily: FONT_DISPLAY, fontSize: 16, fill: 0xffffff, fontWeight: 'bold' },
+    });
+    label.anchor.set(0.5);
+    label.x = 50;
+    label.y = 18;
+    bg.addChild(label);
+  }
+
+  private selectBallCount(n: number): void {
+    this.selectedBallCount = n;
+    this.ballCountBtns.forEach((bg, i) => {
+      // Remove old label children before redraw
+      while (bg.children.length > 0) bg.removeChildAt(0);
+      this.drawBallCountBtn(bg, i + 1, i + 1 === n);
+    });
   }
 
   // ─── Name Input Section ───────────────────────
 
   private buildNameInputSection(): void {
-    this.container.addChild(new SectionLabel({ text: '참가자 입력', y: 586 }).container);
+    this.container.addChild(new SectionLabel({ text: '참가자 입력', y: 648 }).container);
 
     const { scale, offsetY } = this.app.scaleInfo;
-    const designY = 608;
+    const designY = 668;
     const screenY = Math.round(designY * scale + offsetY);
 
     const gameContainer = document.getElementById('game-container');
@@ -241,36 +295,7 @@ export class MainMenuScene extends BaseScene {
 
   private handleStart(): void {
     if (this.players.length < MIN_PLAYERS) return;
-    this.showBettingPhase();
-  }
-
-  private showBettingPhase(): void {
-    // Clean up name input
-    this.nameInput?.destroy();
-    this.nameInput = null;
-
-    // Slide out existing UI
-    gsap.to(this.container, { alpha: 0.3, duration: 0.2, ease: 'power2.in' });
-
-    // Open betting phase
-    this.app.betting.openBetting(this.players);
-
-    const panel = new BettingPanel({
-      players: this.players,
-      bettingManager: this.app.betting,
-      onComplete: () => {
-        this.bettingPanel = null;
-        this.startGame();
-      },
-      onSkip: () => {
-        this.app.betting.reset();
-        this.bettingPanel = null;
-        this.startGame();
-      },
-    });
-
-    this.container.addChild(panel.container);
-    this.bettingPanel = panel;
+    this.startGame();
   }
 
   private startGame(): void {
@@ -278,6 +303,7 @@ export class MainMenuScene extends BaseScene {
       mode: this.selectedGameMode,
       players: this.players,
       pickMode: this.selectedPickMode,
+      ballCount: this.selectedBallCount,
     });
   }
 

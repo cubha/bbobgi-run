@@ -54,8 +54,7 @@ src/
 │   ├── SoundManager.ts   # Howler.js 래퍼
 │   ├── InputManager.ts   # 터치/클릭 통합 입력
 │   ├── PhysicsWorld.ts   # Matter.js 래퍼 (구슬/핀볼 공유)
-│   ├── RecordManager.ts  # Dexie.js 게임 기록 관리 (IndexedDB)
-│   └── BettingManager.ts # Pari-mutuel 베팅 엔진 (FSM)
+│   └── RecordManager.ts  # Dexie.js 게임 기록 관리 (IndexedDB)
 │
 ├── scenes/               # 씬(화면) 단위
 │   ├── MainMenuScene.ts  # 메인 화면 (모드 선택 + 이름 입력)
@@ -84,9 +83,7 @@ src/
 │   ├── NameInput.ts        # 참가자 이름 입력 (HTML overlay, IME 지원)
 │   ├── DotGridBackground.ts  # 도트 그리드 배경 패널
 │   ├── SectionLabel.ts      # 섹션 라벨 (좌측 바 + 텍스트)
-│   ├── StatsPanel.ts        # 전적 통계 패널 (ResultScene)
-│   ├── BettingPanel.ts      # 베팅 화면 (MainMenuScene)
-│   └── BettingResultPanel.ts # 베팅 정산 결과 (ResultScene)
+│   └── StatsPanel.ts        # 전적 통계 패널 (ResultScene)
 │
 └── utils/                # 유틸리티
     ├── random.ts         # 시드 기반 랜덤 (재현성/공정성)
@@ -159,12 +156,14 @@ src/
 - [x] 결과 카드 공유 (Web Share API + clipboard fallback)
 - [x] 리플레이 기능 (이름 유지 + MainMenuScene 복원)
 
-### Phase 4: 베팅/기록 확장 🔄
+### Phase 4: 기록/모드 개선 🔄
 - [x] RecordManager — Dexie.js IndexedDB 게임 기록 자동 저장 + 전적 통계
-- [x] BettingManager — FSM 상태관리 + Pari-mutuel 배당 정산 엔진
 - [x] StatsPanel — ResultScene 전적 통계 UI
-- [x] BettingPanel — MainMenuScene 베팅 화면 (게임 시작 전)
-- [x] BettingResultPanel — ResultScene 베팅 정산 결과 UI
+- [x] 베팅 시스템 제거 — BettingManager / BettingPanel / BettingResultPanel 삭제
+- [ ] 경마: 돔/오벌 트랙 레이아웃 + 빠른 템포 개선
+- [ ] 구슬 레이스: 첫 번째 경로 멈춤 버그 수정
+- [ ] 사다리타기: 복잡한 구조 + 카오스 이벤트 시스템
+- [ ] 파친코: 함정/변수 추가 + 단일 골 구조 + 공 개수 설정
 - [ ] NetworkManager — Supabase Realtime 호스트-게스트 실시간 통신
 - [ ] ReactionOverlay — 응원/리액션 이모지 오버레이 + 모바일 최적화
 
@@ -217,6 +216,14 @@ npm run build
 # 검증 (tsc + eslint + build)
 bash verify.sh
 ```
+
+## 이슈 / 트러블슈팅
+
+| 날짜 | 분류 | 증상 | 원인 | 해결 |
+|---|---|---|---|---|
+| 2026-03-22 | 제거 | 베팅 시스템 오버엔지니어링 | 게임 목적(관람형 뽑기)과 불일치, 코드 복잡도 증가 | BettingManager / BettingPanel / BettingResultPanel 전체 삭제 |
+
+> 새 이슈 발생 시 위 테이블에 행을 추가한다.
 
 ## 참고 자료
 
