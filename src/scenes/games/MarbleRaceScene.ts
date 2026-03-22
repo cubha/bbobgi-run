@@ -38,13 +38,13 @@ const TRACK = {
   /** Ramp width */
   rampWidth: 280,
   /** Ramp height/thickness */
-  rampThick: 10,
+  rampThick: 14,
   /** Number of zigzag ramps */
   rampCount: 8,
   /** Ramp angle in radians */
-  rampAngle: 0.28,
+  rampAngle: 0.35,
   /** Vertical spacing between ramps */
-  rampSpacing: 78,
+  rampSpacing: 85,
 } as const;
 
 /**
@@ -214,6 +214,7 @@ export class MarbleRaceScene extends BaseScene {
         angle,
         restitution: 0.3,
         friction: 0.01,
+        frictionStatic: 0,  // 정지마찰 제거 — 구슬 멈춤 방지
       });
       this.physics.addBodies(ramp);
       this.drawRamp(ramp, i);

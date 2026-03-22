@@ -1,6 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { SeededRandom } from '@utils/random';
-import { RACE_TRACK, PLAYER_COLORS } from '@utils/constants';
+import { OVAL_TRACK, PLAYER_COLORS } from '@utils/constants';
 import type { Player } from '@/types';
 
 export class Horse {
@@ -8,24 +8,29 @@ export class Horse {
   readonly player: Player;
 
   private rng: SeededRandom;
-  private _progress: number = 0;
   private _finished: boolean = false;
   private currentSpeed: number;
   private speedTimer: number = 0;
   private readonly baseSpeed: number;
-  private readonly laneIndex: number;
   private readonly color: number;
   private bodyGfx: Graphics;
   private elapsed: number = 0;
 
+  // Oval track fields
+  private theta: number = Math.PI;    // start angle (left-center of oval)
+  private totalAngle: number = 0;     // cumulative rotation angle
+  private readonly laneRadius: number; // this horse's lane radius (vertical semi-axis)
+
   constructor(player: Player, laneIndex: number, seed: number) {
     this.player = player;
-    this.laneIndex = laneIndex;
     this.rng = new SeededRandom(seed);
     this.color = PLAYER_COLORS[player.id % PLAYER_COLORS.length];
 
-    // baseSpeed: 0.015~0.025 progress/sec
-    this.baseSpeed = this.rng.range(0.015, 0.025);
+    // laneRadius: base ry + lane offset
+    this.laneRadius = OVAL_TRACK.ry + laneIndex * OVAL_TRACK.laneWidth;
+
+    // baseSpeed: 0.08~0.12 rad/sec (upscaled from 0.015~0.025)
+    this.baseSpeed = this.rng.range(0.08, 0.12);
     this.currentSpeed = this.baseSpeed;
 
     this.container = new Container();
@@ -51,20 +56,22 @@ export class Horse {
     this.container.y = this.y;
   }
 
+  // x/y getters: parametric ellipse with lane-scaled radii
+  get x(): number {
+    return OVAL_TRACK.cx + this.laneRadius * Math.cos(this.theta) * (OVAL_TRACK.rx / OVAL_TRACK.ry);
+  }
+
+  get y(): number {
+    return OVAL_TRACK.cy + this.laneRadius * Math.sin(this.theta);
+  }
+
+  // progress: cumulative angle / (2π * laps)
   get progress(): number {
-    return this._progress;
+    return this.totalAngle / (Math.PI * 2 * OVAL_TRACK.laps);
   }
 
   get finished(): boolean {
     return this._finished;
-  }
-
-  get x(): number {
-    return RACE_TRACK.startX + this._progress * (RACE_TRACK.finishX - RACE_TRACK.startX);
-  }
-
-  get y(): number {
-    return RACE_TRACK.topY + this.laneIndex * RACE_TRACK.laneHeight + RACE_TRACK.laneHeight / 2;
   }
 
   update(delta: number): void {
@@ -76,28 +83,41 @@ export class Horse {
     // Every 0.5s, apply noise to speed
     if (this.speedTimer >= 0.5) {
       this.speedTimer -= 0.5;
-      const noise = this.rng.range(-0.005, 0.005);
-      this.currentSpeed = Math.max(0.008, Math.min(0.035, this.baseSpeed + noise));
+      const noise = this.rng.range(-0.025, 0.025);
+      this.currentSpeed = Math.max(0.04, Math.min(0.175, this.baseSpeed + noise));
     }
 
-    this._progress += this.currentSpeed * delta;
+    // Advance theta (clockwise in math convention)
+    const dTheta = this.currentSpeed * delta;
+    this.theta -= dTheta;
+    this.totalAngle += dTheta;
 
-    if (this._progress >= 1.0) {
-      this._progress = 1.0;
+    if (this.totalAngle >= Math.PI * 2 * OVAL_TRACK.laps) {
       this._finished = true;
     }
 
     this.container.x = this.x;
+    this.container.y = this.y;
+
+    // Rotate container to face direction of motion
+    this.container.rotation = Math.atan2(
+      -this.laneRadius * Math.cos(this.theta),
+      this.laneRadius * Math.sin(this.theta) * (OVAL_TRACK.rx / OVAL_TRACK.ry),
+    );
+
     this.drawHorse(this.elapsed);
   }
 
   reset(): void {
-    this._progress = 0;
+    this.theta = Math.PI;
+    this.totalAngle = 0;
     this._finished = false;
     this.currentSpeed = this.baseSpeed;
     this.speedTimer = 0;
     this.elapsed = 0;
     this.container.x = this.x;
+    this.container.y = this.y;
+    this.container.rotation = 0;
     this.drawHorse(0);
   }
 
@@ -154,10 +174,10 @@ export class Horse {
     const lf = legPhase * 5;
     const lb = -legPhase * 5;
 
-    g.moveTo(8, 8);   g.lineTo(8 + lf, 20);  g.stroke({ color, width: 2.5 });
-    g.moveTo(11, 8);  g.lineTo(11 - lf, 20); g.stroke({ color, width: 2.5 });
-    g.moveTo(-6, 8);  g.lineTo(-6 + lb, 20); g.stroke({ color, width: 2.5 });
-    g.moveTo(-3, 8);  g.lineTo(-3 - lb, 20); g.stroke({ color, width: 2.5 });
+    g.moveTo(8, 8);  g.lineTo(8 + lf, 20);  g.stroke({ color, width: 2.5 });
+    g.moveTo(11, 8); g.lineTo(11 - lf, 20); g.stroke({ color, width: 2.5 });
+    g.moveTo(-6, 8); g.lineTo(-6 + lb, 20); g.stroke({ color, width: 2.5 });
+    g.moveTo(-3, 8); g.lineTo(-3 - lb, 20); g.stroke({ color, width: 2.5 });
 
     // Hooves
     g.roundRect(8 + lf - 2, 18, 5, 3, 1);   g.fill({ color: dark });

@@ -23,39 +23,63 @@ type GamePhase = 'countdown' | 'dropping' | 'chaos' | 'tension' | 'slowmo' | 'do
 
 /** Board layout constants */
 const BOARD = {
-  leftX: 25,
-  rightX: 365,
+  leftX: 20,
+  rightX: 370,
   topY: 100,
-  bottomY: 740,
+  pinGridBottomY: 580,
+  funnelTopY: 590,
+  funnelBottomY: 760,
+  goalY: 790,
+  goalWidth: 26,       // ~1.4× ball diameter (ball=9)
   pinRadius: 4,
-  ballRadius: 8,
+  ballRadius: 9,
   pinRows: 10,
   pinCols: 12,
-  pinSpacingX: 28,
-  pinSpacingY: 50,
-  wallThick: 10,
-  slotHeight: 40,
-  dropAreaY: 80,
+  pinSpacingY: 48,
+  wallThick: 12,
+  dropAreaY: 82,
 } as const;
 
-/** Pachinko timing */
+/** Pachinko timing (game-elapsed seconds, after countdown) */
 const PACHINKO_DURATION_SEC = 25;
+const PACHINKO_GATE1_SEC = 5;
+const PACHINKO_GATE2_SEC = 15;
 const PACHINKO_CHAOS_SEC = 15;
 const PACHINKO_TENSION_SEC = 20;
 const PACHINKO_SLOWMO_SEC = 23;
+
+const BUMPER_RADIUS = 14;
+const SPINNER_W = 60;
+const SPINNER_H = 8;
 
 interface PachinkoBall {
   body: Matter.Body;
   gfx: Container;
   player: Player;
   finished: boolean;
-  slotIndex: number;
   finishTime: number;
 }
 
+interface Bumper {
+  body: Matter.Body;
+  gfx: Graphics;
+  overcharged: boolean;
+}
+
+interface Spinner {
+  body: Matter.Body;
+  gfx: Graphics;
+}
+
+interface Gate {
+  body: Matter.Body;
+  gfx: Graphics;
+  open: boolean;
+}
+
 /**
- * Pachinko game scene — balls fall through pin grid into ranked slots.
- * ~25 second timeline with countdown + drop + chaos + slowmo.
+ * Pachinko scene — balls fall through pin grid + devices into a single funnel goal.
+ * Arrival order = ranking. Supports multiple balls per player (config.ballCount).
  */
 export class PachinkoScene extends BaseScene {
   protected config: GameConfig | null = null;
@@ -63,6 +87,7 @@ export class PachinkoScene extends BaseScene {
 
   private physics: PhysicsWorld | null = null;
   private balls: PachinkoBall[] = [];
+  private finishOrder: Player[] = [];  // first-ball-wins: player added once
   private totalElapsed = 0;
   private phase: GamePhase = 'countdown';
   private rng: SeededRandom | null = null;
@@ -78,12 +103,19 @@ export class PachinkoScene extends BaseScene {
 
   private timerBar: Graphics | null = null;
   private phaseLabel: Text | null = null;
+  private goalSensor: Matter.Body | null = null;
+  private rankLabel: Text | null = null;
+
   private chaosApplied = false;
+  private bumperOvercharged = false;
+  private gate1Done = false;
+  private gate2Done = false;
   private dropIndex = 0;
   private dropTimer = 0;
-  private slotCount = 0;
-  private slotSensors: Matter.Body[] = [];
-  private slotLabels: Text[] = [];
+
+  private bumpers: Bumper[] = [];
+  private spinners: Spinner[] = [];
+  private gates: Gate[] = [];
 
   setConfig(config: GameConfig): void {
     this.config = config;
@@ -98,7 +130,6 @@ export class PachinkoScene extends BaseScene {
 
     this.rng = new SeededRandom(this.config.seed);
     this.physics = new PhysicsWorld({ x: 0, y: 1 });
-    this.slotCount = this.config.players.length;
 
     this.container.addChild(this.boardContainer);
     this.container.addChild(this.ballContainer);
@@ -106,7 +137,7 @@ export class PachinkoScene extends BaseScene {
 
     this.buildBoard();
     this.buildHUD();
-    this.setupCollisionDetection();
+    this.setupPhysicsHandlers();
     this.startCountdown();
   }
 
@@ -118,7 +149,7 @@ export class PachinkoScene extends BaseScene {
 
     if (this.phase === 'countdown') return;
 
-    // Phase transitions
+    // End condition
     if (this.totalElapsed >= PACHINKO_DURATION_SEC + COUNTDOWN_SEC) {
       this.endGame();
       return;
@@ -126,6 +157,7 @@ export class PachinkoScene extends BaseScene {
 
     const gameElapsed = this.totalElapsed - COUNTDOWN_SEC;
 
+    // Phase transitions
     if (this.phase !== 'slowmo' && gameElapsed >= PACHINKO_SLOWMO_SEC) {
       this.enterSlowmo();
     } else if (this.phase === 'chaos' && gameElapsed >= PACHINKO_TENSION_SEC) {
@@ -136,10 +168,20 @@ export class PachinkoScene extends BaseScene {
       this.applyChaos();
     }
 
-    // Drop balls sequentially in the first few seconds
+    // Gate events
+    if (!this.gate1Done && gameElapsed >= PACHINKO_GATE1_SEC) {
+      this.gate1Done = true;
+      this.toggleGates();
+    }
+    if (!this.gate2Done && gameElapsed >= PACHINKO_GATE2_SEC) {
+      this.gate2Done = true;
+      this.toggleGates();
+    }
+
+    // Drop balls sequentially
     if (this.dropIndex < this.balls.length) {
       this.dropTimer += dt;
-      const dropInterval = Math.max(0.3, 2.0 / this.balls.length);
+      const dropInterval = Math.max(0.2, 1.8 / this.balls.length);
       if (this.dropTimer >= dropInterval) {
         this.dropTimer -= dropInterval;
         this.dropBall(this.dropIndex);
@@ -165,13 +207,25 @@ export class PachinkoScene extends BaseScene {
       }
     }
 
-    // Update timer
-    const totalGame = PACHINKO_DURATION_SEC;
-    const progress = Math.max(0, Math.min(1, 1 - gameElapsed / totalGame));
+    // Sync spinner sprites
+    for (const spinner of this.spinners) {
+      spinner.gfx.rotation = spinner.body.angle;
+    }
+
+    // Sync gate sprites
+    for (const gate of this.gates) {
+      gate.gfx.visible = !gate.open;
+    }
+
+    // Timer bar
+    const progress = Math.max(0, Math.min(1, 1 - gameElapsed / PACHINKO_DURATION_SEC));
     this.updateTimerBar(progress);
 
-    // Check all landed
-    if (this.balls.every((b) => b.finished)) {
+    // All balls finished?
+    const allPlayersDone = this.config!.players.every((p) =>
+      this.finishOrder.some((fp) => fp.id === p.id),
+    );
+    if (allPlayersDone) {
       this.endGame();
     }
   }
@@ -185,48 +239,60 @@ export class PachinkoScene extends BaseScene {
     super.destroy();
   }
 
-  // ─── Build ───────────────────────────────────
+  // ─── Build Board ──────────────────────────────
 
   private buildBoard(): void {
     if (!this.physics || !this.config) return;
 
-    // Full background
+    const boardWidth = BOARD.rightX - BOARD.leftX;
+    const cx = (BOARD.leftX + BOARD.rightX) / 2;
+
+    // Background
     const bg = new Graphics();
     bg.rect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
     bg.fill(COLORS.background);
     this.boardContainer.addChild(bg);
 
-    // Board area
+    // Board panel
     const boardBg = new Graphics();
-    boardBg.rect(BOARD.leftX, BOARD.topY - 10, BOARD.rightX - BOARD.leftX, BOARD.bottomY - BOARD.topY + 60);
-    boardBg.fill({ color: 0x0a1520 });
+    boardBg.rect(BOARD.leftX, BOARD.topY - 10, boardWidth, BOARD.funnelBottomY - BOARD.topY + 30);
+    boardBg.fill({ color: 0x050d18 });
     this.boardContainer.addChild(boardBg);
 
-    const boardWidth = BOARD.rightX - BOARD.leftX;
-    const cx = (BOARD.leftX + BOARD.rightX) / 2;
+    // Left/right walls
+    const wallH = BOARD.funnelBottomY - BOARD.topY + 40;
+    const wallMidY = (BOARD.topY + BOARD.funnelBottomY) / 2;
+    this.physics.addBodies(
+      PhysicsWorld.createWall(BOARD.leftX, wallMidY, BOARD.wallThick, wallH),
+      PhysicsWorld.createWall(BOARD.rightX, wallMidY, BOARD.wallThick, wallH),
+    );
 
-    // Left wall
-    this.physics.addBodies(PhysicsWorld.createWall(
-      BOARD.leftX, (BOARD.topY + BOARD.bottomY) / 2,
-      BOARD.wallThick, BOARD.bottomY - BOARD.topY + 80,
-    ));
-    // Right wall
-    this.physics.addBodies(PhysicsWorld.createWall(
-      BOARD.rightX, (BOARD.topY + BOARD.bottomY) / 2,
-      BOARD.wallThick, BOARD.bottomY - BOARD.topY + 80,
-    ));
-
-    // Draw walls
+    // Wall visuals
     const wallGfx = new Graphics();
-    wallGfx.rect(BOARD.leftX - BOARD.wallThick / 2, BOARD.topY - 10, BOARD.wallThick, BOARD.bottomY - BOARD.topY + 60);
-    wallGfx.rect(BOARD.rightX - BOARD.wallThick / 2, BOARD.topY - 10, BOARD.wallThick, BOARD.bottomY - BOARD.topY + 60);
-    wallGfx.fill({ color: 0x1a2a3a, alpha: 0.8 });
+    wallGfx.rect(BOARD.leftX - BOARD.wallThick / 2, BOARD.topY - 10, BOARD.wallThick, wallH);
+    wallGfx.rect(BOARD.rightX - BOARD.wallThick / 2, BOARD.topY - 10, BOARD.wallThick, wallH);
+    wallGfx.fill({ color: 0x1a3050, alpha: 0.9 });
     this.boardContainer.addChild(wallGfx);
 
-    // Pins — zigzag grid
-    const pinStartX = BOARD.leftX + BOARD.wallThick + 20;
-    const pinStartY = BOARD.topY + 30;
-    const usableWidth = boardWidth - BOARD.wallThick * 2 - 40;
+    // Pin grid (zigzag)
+    this.buildPins(boardWidth);
+
+    // Devices
+    this.buildDevices(cx, boardWidth);
+
+    // Funnel + goal
+    this.buildFunnelGoal(cx, boardWidth);
+
+    // Balls
+    this.createBalls(cx);
+  }
+
+  private buildPins(boardWidth: number): void {
+    if (!this.physics) return;
+
+    const pinStartX = BOARD.leftX + BOARD.wallThick + 18;
+    const pinStartY = BOARD.topY + 28;
+    const usableWidth = boardWidth - BOARD.wallThick * 2 - 36;
 
     for (let row = 0; row < BOARD.pinRows; row++) {
       const isOffset = row % 2 === 1;
@@ -241,7 +307,6 @@ export class PachinkoScene extends BaseScene {
         const pin = PhysicsWorld.createPin(px, py, BOARD.pinRadius);
         this.physics.addBodies(pin);
 
-        // Draw pin
         const pinGfx = new Graphics();
         pinGfx.circle(px, py, BOARD.pinRadius);
         pinGfx.fill({ color: 0x4488aa, alpha: 0.9 });
@@ -250,138 +315,240 @@ export class PachinkoScene extends BaseScene {
         this.boardContainer.addChild(pinGfx);
       }
     }
-
-    // Bottom floor
-    this.physics.addBodies(PhysicsWorld.createWall(
-      cx, BOARD.bottomY + BOARD.slotHeight + 10,
-      boardWidth, BOARD.wallThick,
-    ));
-
-    // Slot dividers + sensors
-    this.buildSlots(cx, boardWidth);
-
-    // Create ball objects (but don't add to physics yet — dropped sequentially)
-    this.createBalls(cx);
   }
 
-  private buildSlots(_cx: number, boardWidth: number): void {
-    if (!this.physics || !this.config) return;
+  private buildDevices(cx: number, boardWidth: number): void {
+    if (!this.physics || !this.rng) return;
 
-    const slotWidth = (boardWidth - BOARD.wallThick * 2) / this.slotCount;
-    const slotStartX = BOARD.leftX + BOARD.wallThick / 2;
-    const slotY = BOARD.bottomY;
+    // Device placement — fixed positions in pin grid gaps
+    const deviceZoneY1 = BOARD.topY + 80;
+    const deviceZoneY2 = BOARD.topY + 200;
+    const deviceZoneY3 = BOARD.topY + 340;
+    const innerLeft = BOARD.leftX + BOARD.wallThick + 30;
+    const innerRight = BOARD.rightX - BOARD.wallThick - 30;
 
-    // Rank labels (1st slot = rank 1, etc.) — shuffle for fairness
-    const rankOrder = Array.from({ length: this.slotCount }, (_, i) => i + 1);
-    this.rng!.shuffle(rankOrder);
-
-    for (let i = 0; i <= this.slotCount; i++) {
-      const divX = slotStartX + i * slotWidth;
-
-      // Divider wall
-      if (i > 0 && i < this.slotCount) {
-        const divider = PhysicsWorld.createWall(divX, slotY + BOARD.slotHeight / 2, 4, BOARD.slotHeight);
-        this.physics.addBodies(divider);
-      }
-
-      // Divider visual
-      if (i <= this.slotCount) {
-        const divGfx = new Graphics();
-        divGfx.rect(divX - 1, slotY, 2, BOARD.slotHeight);
-        divGfx.fill({ color: 0x336655, alpha: 0.8 });
-        this.boardContainer.addChild(divGfx);
-      }
+    // Bumpers (2)
+    const bumperPositions = [
+      { x: cx - 60 + this.rng.range(-15, 15), y: deviceZoneY1 + this.rng.range(-10, 10) },
+      { x: cx + 60 + this.rng.range(-15, 15), y: deviceZoneY2 + this.rng.range(-10, 10) },
+    ];
+    for (const pos of bumperPositions) {
+      this.addBumper(pos.x, pos.y);
     }
 
-    // Slot sensors + labels
-    for (let i = 0; i < this.slotCount; i++) {
-      const sensorX = slotStartX + (i + 0.5) * slotWidth;
-      const sensorY = slotY + BOARD.slotHeight / 2;
-      const rank = rankOrder[i];
+    // Spinners (2)
+    const spinnerPositions = [
+      { x: cx + this.rng.range(-40, 40), y: deviceZoneY2 + 60 },
+      { x: cx + this.rng.range(-40, 40), y: deviceZoneY3 + 20 },
+    ];
+    for (const pos of spinnerPositions) {
+      this.addSpinner(pos.x, pos.y);
+    }
 
-      const sensor = PhysicsWorld.createSensor(
-        sensorX, sensorY,
-        slotWidth - 6, BOARD.slotHeight - 4,
-        `slot-${rank}`,
+    // Gates (2) — placed horizontally, partially blocking the path
+    const gateY1 = BOARD.topY + 160;
+    const gateY2 = BOARD.topY + 300;
+    this.addGate(innerLeft + (boardWidth - BOARD.wallThick * 2 - 60) * 0.25, gateY1, 55);
+    this.addGate(innerRight - (boardWidth - BOARD.wallThick * 2 - 60) * 0.25, gateY2, 55);
+  }
+
+  private addBumper(x: number, y: number): void {
+    if (!this.physics) return;
+
+    const body = Matter.Bodies.circle(x, y, BUMPER_RADIUS, {
+      isStatic: true,
+      restitution: 1.5,
+      friction: 0,
+      label: 'bumper',
+    });
+    this.physics.addBodies(body);
+
+    const gfx = new Graphics();
+    gfx.circle(x, y, BUMPER_RADIUS);
+    gfx.fill({ color: 0xcc2222, alpha: 0.9 });
+    gfx.circle(x, y, BUMPER_RADIUS * 0.55);
+    gfx.fill({ color: 0xff6666, alpha: 0.7 });
+    this.boardContainer.addChild(gfx);
+
+    this.bumpers.push({ body, gfx, overcharged: false });
+  }
+
+  private addSpinner(x: number, y: number): void {
+    if (!this.physics) return;
+
+    const body = Matter.Bodies.rectangle(x, y, SPINNER_W, SPINNER_H, {
+      isStatic: true,
+      friction: 0,
+      restitution: 0.3,
+      label: 'spinner',
+    });
+    this.physics.addBodies(body);
+
+    const gfx = new Graphics();
+    gfx.rect(-SPINNER_W / 2, -SPINNER_H / 2, SPINNER_W, SPINNER_H);
+    gfx.fill({ color: 0x2266cc, alpha: 0.9 });
+    gfx.x = x;
+    gfx.y = y;
+    this.boardContainer.addChild(gfx);
+
+    this.spinners.push({ body, gfx });
+  }
+
+  private addGate(x: number, y: number, width: number): void {
+    if (!this.physics) return;
+
+    const body = PhysicsWorld.createWall(x, y, width, 8);
+    this.physics.addBodies(body);
+
+    const gfx = new Graphics();
+    gfx.rect(x - width / 2, y - 4, width, 8);
+    gfx.fill({ color: 0x22aa44, alpha: 0.9 });
+    this.boardContainer.addChild(gfx);
+
+    this.gates.push({ body, gfx, open: false });
+  }
+
+  private buildFunnelGoal(cx: number, boardWidth: number): void {
+    if (!this.physics) return;
+
+    // Funnel angled walls converging to goalWidth hole
+    const funnelTopLeft = BOARD.leftX + BOARD.wallThick;
+    const funnelTopRight = BOARD.rightX - BOARD.wallThick;
+    const holeLeft = cx - BOARD.goalWidth / 2;
+    const holeRight = cx + BOARD.goalWidth / 2;
+    const funnelH = BOARD.funnelBottomY - BOARD.funnelTopY;
+
+    // Left funnel wall
+    const leftWallLen = Math.sqrt(
+      Math.pow(cx - BOARD.goalWidth / 2 - funnelTopLeft, 2) + Math.pow(funnelH, 2),
+    );
+    const leftAngle = Math.atan2(funnelH, holeLeft - funnelTopLeft);
+    const leftFunnelX = (funnelTopLeft + holeLeft) / 2;
+    const leftFunnelY = (BOARD.funnelTopY + BOARD.funnelBottomY) / 2;
+    const leftWall = PhysicsWorld.createWall(leftFunnelX, leftFunnelY, leftWallLen, 8, {
+      angle: leftAngle,
+    });
+    this.physics.addBodies(leftWall);
+
+    // Right funnel wall
+    const rightWallLen = Math.sqrt(
+      Math.pow(funnelTopRight - holeRight, 2) + Math.pow(funnelH, 2),
+    );
+    const rightAngle = Math.atan2(funnelH, funnelTopRight - holeRight) * -1;
+    const rightFunnelX = (funnelTopRight + holeRight) / 2;
+    const rightFunnelY = (BOARD.funnelTopY + BOARD.funnelBottomY) / 2;
+    const rightWall = PhysicsWorld.createWall(rightFunnelX, rightFunnelY, rightWallLen, 8, {
+      angle: rightAngle,
+    });
+    this.physics.addBodies(rightWall);
+
+    // Floor below funnel (with gap = goal hole)
+    const floorY = BOARD.funnelBottomY + 4;
+    const leftFloorW = holeLeft - (BOARD.leftX + BOARD.wallThick);
+    const rightFloorW = (BOARD.rightX - BOARD.wallThick) - holeRight;
+    if (leftFloorW > 0) {
+      this.physics.addBodies(
+        PhysicsWorld.createWall(BOARD.leftX + BOARD.wallThick + leftFloorW / 2, floorY, leftFloorW, 8),
       );
-      this.physics.addBodies(sensor);
-      this.slotSensors.push(sensor);
-
-      // Slot background color (gold for 1st, red for last, gradient between)
-      const slotBg = new Graphics();
-      slotBg.rect(slotStartX + i * slotWidth + 1, slotY + 1, slotWidth - 2, BOARD.slotHeight - 2);
-      const slotColor = rank === 1 ? 0x2a2a00 : rank === this.slotCount ? 0x2a0000 : 0x0a1520;
-      slotBg.fill({ color: slotColor, alpha: 0.6 });
-      this.boardContainer.addChild(slotBg);
-
-      // Rank label
-      const label = new Text({
-        text: `${rank}등`,
-        style: {
-          fontFamily: FONT_BODY,
-          fontSize: 10,
-          fontWeight: '700',
-          fill: rank === 1 ? COLORS.gold : rank === this.slotCount ? COLORS.primary : COLORS.textDim,
-        },
-      });
-      label.anchor.set(0.5);
-      label.x = sensorX;
-      label.y = slotY + BOARD.slotHeight / 2;
-      this.boardContainer.addChild(label);
-      this.slotLabels.push(label);
     }
+    if (rightFloorW > 0) {
+      this.physics.addBodies(
+        PhysicsWorld.createWall(holeRight + rightFloorW / 2, floorY, rightFloorW, 8),
+      );
+    }
+
+    // Draw funnel visual
+    const funnelGfx = new Graphics();
+    // Left funnel
+    funnelGfx.moveTo(funnelTopLeft, BOARD.funnelTopY);
+    funnelGfx.lineTo(holeLeft, BOARD.funnelBottomY);
+    funnelGfx.stroke({ color: 0x2244aa, width: 4, alpha: 0.9 });
+    // Right funnel
+    funnelGfx.moveTo(funnelTopRight, BOARD.funnelTopY);
+    funnelGfx.lineTo(holeRight, BOARD.funnelBottomY);
+    funnelGfx.stroke({ color: 0x2244aa, width: 4, alpha: 0.9 });
+    this.boardContainer.addChild(funnelGfx);
+
+    // Goal hole highlight
+    const goalGfx = new Graphics();
+    goalGfx.rect(holeLeft, BOARD.funnelBottomY, BOARD.goalWidth, 20);
+    goalGfx.fill({ color: COLORS.gold, alpha: 0.3 });
+    this.boardContainer.addChild(goalGfx);
+
+    // GOAL label
+    const goalText = new Text({
+      text: 'GOAL',
+      style: { fontFamily: FONT_DISPLAY, fontSize: 10, fill: COLORS.gold, fontWeight: '700' },
+    });
+    goalText.anchor.set(0.5, 0);
+    goalText.x = cx;
+    goalText.y = BOARD.funnelBottomY + 2;
+    this.boardContainer.addChild(goalText);
+
+    // Sensor body
+    this.goalSensor = PhysicsWorld.createSensor(cx, BOARD.goalY, BOARD.goalWidth + 10, 30, 'goal');
+    this.physics.addBodies(this.goalSensor);
+
+    // Rank display area below goal
+    this.rankLabel = new Text({
+      text: '',
+      style: { fontFamily: FONT_BODY, fontSize: 11, fill: COLORS.text, fontWeight: '700', align: 'center', wordWrap: true, wordWrapWidth: boardWidth - 20 },
+    });
+    this.rankLabel.anchor.set(0.5, 0);
+    this.rankLabel.x = cx;
+    this.rankLabel.y = BOARD.goalY + 20;
+    this.boardContainer.addChild(this.rankLabel);
+
+    // Unused variable suppression
+    void boardWidth;
   }
 
   private createBalls(cx: number): void {
     if (!this.config) return;
     const { players } = this.config;
+    const ballCount = this.config.ballCount ?? 1;
 
-    players.forEach((player) => {
+    for (const player of players) {
       const color = PLAYER_COLORS[player.id % PLAYER_COLORS.length];
-      const x = cx;
-      const y = BOARD.dropAreaY;
 
-      // Create physics body (will be added to world on drop)
-      const body = PhysicsWorld.createBall(x, y, BOARD.ballRadius, {
-        restitution: 0.5,
-        friction: 0.005,
-        frictionAir: 0.015,
-      });
-      // Keep ball static until drop
-      Matter.Body.setStatic(body, true);
+      for (let bi = 0; bi < ballCount; bi++) {
+        const x = cx;
+        const y = BOARD.dropAreaY;
 
-      // Visual
-      const gfx = new Container();
+        const body = PhysicsWorld.createBall(x, y, BOARD.ballRadius, {
+          restitution: 0.5,
+          friction: 0.005,
+          frictionAir: 0.015,
+        });
+        Matter.Body.setStatic(body, true);
+        body.label = `ball-${player.id}-${bi}`;
 
-      const circle = new Graphics();
-      circle.circle(0, 0, BOARD.ballRadius);
-      circle.fill({ color });
-      circle.circle(-2, -2, BOARD.ballRadius * 0.4);
-      circle.fill({ color: 0xffffff, alpha: 0.3 });
-      gfx.addChild(circle);
+        const gfx = new Container();
+        const circle = new Graphics();
+        circle.circle(0, 0, BOARD.ballRadius);
+        circle.fill({ color });
+        circle.circle(-2, -2, BOARD.ballRadius * 0.4);
+        circle.fill({ color: 0xffffff, alpha: 0.3 });
+        gfx.addChild(circle);
 
-      const nameText = new Text({
-        text: player.name,
-        style: { fontFamily: FONT_BODY, fontSize: 7, fontWeight: '700', fill: color },
-      });
-      nameText.anchor.set(0.5, 0);
-      nameText.y = BOARD.ballRadius + 1;
-      gfx.addChild(nameText);
+        // Show name only on first ball
+        if (bi === 0) {
+          const nameText = new Text({
+            text: player.name.slice(0, 2),
+            style: { fontFamily: FONT_BODY, fontSize: 7, fontWeight: '700', fill: 0xffffff },
+          });
+          nameText.anchor.set(0.5, 0.5);
+          gfx.addChild(nameText);
+        }
 
-      gfx.x = x;
-      gfx.y = y;
-      gfx.visible = false;
-      this.ballContainer.addChild(gfx);
+        gfx.x = x;
+        gfx.y = y;
+        gfx.visible = false;
+        this.ballContainer.addChild(gfx);
 
-      this.balls.push({
-        body,
-        gfx,
-        player,
-        finished: false,
-        slotIndex: -1,
-        finishTime: 0,
-      });
-    });
+        this.balls.push({ body, gfx, player, finished: false, finishTime: 0 });
+      }
+    }
   }
 
   private dropBall(index: number): void {
@@ -389,24 +556,128 @@ export class PachinkoScene extends BaseScene {
     const ball = this.balls[index];
     if (!ball) return;
 
-    // Randomize drop x position
     const cx = (BOARD.leftX + BOARD.rightX) / 2;
-    const spread = (BOARD.rightX - BOARD.leftX) * 0.3;
+    const spread = (BOARD.rightX - BOARD.leftX) * 0.28;
     const dropX = cx + this.rng.range(-spread, spread);
 
     Matter.Body.setStatic(ball.body, false);
     Matter.Body.setPosition(ball.body, { x: dropX, y: BOARD.dropAreaY });
-    Matter.Body.setVelocity(ball.body, { x: 0, y: 0 });
+    Matter.Body.setVelocity(ball.body, { x: this.rng.range(-1, 1), y: 1 });
     this.physics.addBodies(ball.body);
     ball.gfx.visible = true;
     ball.gfx.x = dropX;
     ball.gfx.y = BOARD.dropAreaY;
   }
 
+  // ─── Physics Handlers ─────────────────────────
+
+  private setupPhysicsHandlers(): void {
+    if (!this.physics) return;
+
+    // Collision: goal sensor + bumpers
+    this.physics.onCollisionStart((event) => {
+      for (const pair of event.pairs) {
+        const { bodyA, bodyB } = pair;
+
+        // Goal detection
+        const isGoalA = bodyA.label === 'goal';
+        const isGoalB = bodyB.label === 'goal';
+        if (isGoalA || isGoalB) {
+          const ballBody = isGoalA ? bodyB : bodyA;
+          const ball = this.balls.find((b) => b.body === ballBody && !b.finished);
+          if (ball) {
+            ball.finished = true;
+            ball.finishTime = this.totalElapsed;
+            // First ball of this player to arrive counts
+            if (!this.finishOrder.some((p) => p.id === ball.player.id)) {
+              this.finishOrder.push(ball.player);
+              this.updateRankLabel();
+            }
+            Matter.Body.setStatic(ballBody, true);
+          }
+        }
+
+        // Bumper hit — apply repulsion
+        const isBumperA = bodyA.label === 'bumper';
+        const isBumperB = bodyB.label === 'bumper';
+        if (isBumperA || isBumperB) {
+          const bumperBody = isBumperA ? bodyA : bodyB;
+          const ballBody = isBumperA ? bodyB : bodyA;
+          const ball = this.balls.find((b) => b.body === ballBody && !b.finished);
+          if (ball) {
+            const bumper = this.bumpers.find((bm) => bm.body === bumperBody);
+            const force = bumper?.overcharged ? 0.025 : 0.012;
+            const dx = ballBody.position.x - bumperBody.position.x;
+            const dy = ballBody.position.y - bumperBody.position.y;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            Matter.Body.setVelocity(ballBody, {
+              x: (dx / len) * 8 * (bumper?.overcharged ? 2 : 1),
+              y: (dy / len) * 8 * (bumper?.overcharged ? 2 : 1),
+            });
+            void force;
+          }
+        }
+      }
+    });
+
+    // Before-update: spinner rotation + speed floor
+    this.physics.onBeforeUpdate(() => {
+      // Rotate spinners
+      for (const spinner of this.spinners) {
+        Matter.Body.setAngle(spinner.body, spinner.body.angle + 0.05);
+      }
+
+      // Speed floor — prevent stuck balls
+      for (const ball of this.balls) {
+        if (ball.finished) continue;
+        const vx = ball.body.velocity.x;
+        const vy = ball.body.velocity.y;
+        const speed = Math.sqrt(vx * vx + vy * vy);
+        if (speed < 0.5 && speed > 0) {
+          const dir = Matter.Vector.normalise(ball.body.velocity);
+          Matter.Body.setVelocity(ball.body, { x: dir.x * 0.5, y: dir.y * 0.5 });
+        } else if (speed === 0 && !ball.body.isStatic) {
+          // Completely stuck — nudge down
+          Matter.Body.setVelocity(ball.body, { x: this.rng!.range(-0.5, 0.5), y: 1 });
+        }
+      }
+    });
+  }
+
+  // ─── Devices ──────────────────────────────────
+
+  private toggleGates(): void {
+    for (const gate of this.gates) {
+      gate.open = !gate.open;
+      if (gate.open) {
+        this.physics?.removeBodies(gate.body);
+      } else {
+        this.physics?.addBodies(gate.body);
+      }
+    }
+  }
+
+  private overchargeBumpers(): void {
+    if (this.bumperOvercharged) return;
+    this.bumperOvercharged = true;
+    for (const bumper of this.bumpers) {
+      bumper.overcharged = true;
+      bumper.body.restitution = 3.0;
+      // Redraw bumper white
+      bumper.gfx.clear();
+      bumper.gfx.circle(bumper.body.position.x, bumper.body.position.y, BUMPER_RADIUS);
+      bumper.gfx.fill({ color: 0xffffff, alpha: 0.95 });
+      bumper.gfx.circle(bumper.body.position.x, bumper.body.position.y, BUMPER_RADIUS * 0.55);
+      bumper.gfx.fill({ color: 0xff4444, alpha: 0.8 });
+    }
+  }
+
+  // ─── HUD ──────────────────────────────────────
+
   private buildHUD(): void {
     const hudBg = new Graphics();
     hudBg.rect(0, 0, DESIGN_WIDTH, BOARD.topY - 10);
-    hudBg.fill({ color: 0x080810 });
+    hudBg.fill({ color: 0x060810 });
     this.uiContainer.addChild(hudBg);
 
     // Timer bar background
@@ -415,14 +686,14 @@ export class PachinkoScene extends BaseScene {
     timerBgBar.fill({ color: 0x222233, alpha: 0.9 });
     this.uiContainer.addChild(timerBgBar);
 
-    // Timer bar fill
     this.timerBar = new Graphics();
     this.uiContainer.addChild(this.timerBar);
     this.updateTimerBar(1);
 
     // Title
+    const ballCount = this.config?.ballCount ?? 1;
     const title = new Text({
-      text: '파친코',
+      text: `파친코${ballCount > 1 ? ` (공×${ballCount})` : ''}`,
       style: { fontFamily: FONT_DISPLAY, fontSize: 14, fill: COLORS.textDim },
     });
     title.x = 14;
@@ -439,7 +710,7 @@ export class PachinkoScene extends BaseScene {
     this.phaseLabel.y = 26;
     this.uiContainer.addChild(this.phaseLabel);
 
-    // Player list (who's dropped)
+    // Player dots
     const { players } = this.config!;
     players.forEach((player, i) => {
       const color = PLAYER_COLORS[player.id % PLAYER_COLORS.length];
@@ -461,34 +732,6 @@ export class PachinkoScene extends BaseScene {
     });
   }
 
-  private setupCollisionDetection(): void {
-    if (!this.physics) return;
-
-    this.physics.onCollisionStart((event) => {
-      for (const pair of event.pairs) {
-        const bodies = [pair.bodyA, pair.bodyB];
-        const sensor = bodies.find((b) => typeof b.label === 'string' && b.label.startsWith('slot-'));
-        const ballBody = bodies.find((b) => b !== sensor && !b.isStatic);
-
-        if (sensor && ballBody) {
-          const ball = this.balls.find((b) => b.body === ballBody && !b.finished);
-          if (ball) {
-            // Extract rank from label "slot-N"
-            const rank = parseInt(sensor.label.split('-')[1], 10);
-            ball.finished = true;
-            ball.slotIndex = rank;
-            ball.finishTime = this.totalElapsed;
-
-            // Stop the ball
-            Matter.Body.setStatic(ballBody, true);
-          }
-        }
-      }
-    });
-  }
-
-  // ─── HUD Updates ──────────────────────────────
-
   private updateTimerBar(progress: number): void {
     if (!this.timerBar) return;
     const barWidth = DESIGN_WIDTH - 28;
@@ -501,6 +744,12 @@ export class PachinkoScene extends BaseScene {
 
   private setPhaseLabel(text: string): void {
     if (this.phaseLabel) this.phaseLabel.text = text;
+  }
+
+  private updateRankLabel(): void {
+    if (!this.rankLabel) return;
+    const lines = this.finishOrder.map((p, i) => `${i + 1}등: ${p.name}`).join('  ');
+    this.rankLabel.text = lines;
   }
 
   // ─── Phase Handlers ───────────────────────────
@@ -526,8 +775,13 @@ export class PachinkoScene extends BaseScene {
     this.chaos.play(this.uiContainer, (BOARD.topY - 10) / 2 + 12);
     this.shaker.shake(this.ballContainer, 5, 6);
 
-    // Shift gravity sideways
-    this.physics.setGravity(0.5, 0.8);
+    // Gravity shift
+    this.physics.setGravity(0.4, 0.9);
+
+    // Bumper overcharge after first arrival (or trigger now if some already done)
+    if (this.finishOrder.length > 0) {
+      this.overchargeBumpers();
+    }
   }
 
   private enterSlowmo(): void {
@@ -554,41 +808,23 @@ export class PachinkoScene extends BaseScene {
     });
   }
 
-  // ─── Rankings ──────────────────────────────────
+  // ─── Rankings ─────────────────────────────────
 
   private buildRankings(): RankingEntry[] {
-    // Balls that landed in slots get the rank of their slot
-    // Balls that didn't land get ranks after all landed balls
-    const landed = this.balls.filter((b) => b.finished).sort((a, b) => a.finishTime - b.finishTime);
-    const unfinished = this.balls.filter((b) => !b.finished);
-
-    // Map slot ranks — each ball's slotIndex IS its rank
     const rankings: RankingEntry[] = [];
-    for (const ball of landed) {
-      rankings.push({
-        player: ball.player,
-        rank: ball.slotIndex,
-        finishTime: ball.finishTime,
-      });
-    }
 
-    // Unfinished balls get lowest ranks
-    const maxLandedRank = landed.length > 0
-      ? Math.max(...landed.map((b) => b.slotIndex))
-      : 0;
-    unfinished.forEach((ball, i) => {
-      rankings.push({
-        player: ball.player,
-        rank: maxLandedRank + i + 1,
-      });
+    // finishOrder = arrival order (first ball per player)
+    this.finishOrder.forEach((player, i) => {
+      const ball = this.balls.find((b) => b.player.id === player.id && b.finished);
+      rankings.push({ player, rank: i + 1, finishTime: ball?.finishTime });
     });
 
-    // Sort by rank ascending
-    rankings.sort((a, b) => a.rank - b.rank);
-
-    // Re-assign sequential ranks (1, 2, 3...)
-    rankings.forEach((entry, i) => {
-      entry.rank = i + 1;
+    // Players who never arrived get last ranks
+    const remaining = this.config!.players.filter(
+      (p) => !this.finishOrder.some((fp) => fp.id === p.id),
+    );
+    remaining.forEach((player, i) => {
+      rankings.push({ player, rank: this.finishOrder.length + i + 1 });
     });
 
     return rankings;

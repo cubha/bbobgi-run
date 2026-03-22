@@ -3,7 +3,6 @@ import { SceneManager } from './SceneManager';
 import { SoundManager } from './SoundManager';
 import { InputManager } from './InputManager';
 import { RecordManager } from './RecordManager';
-import { BettingManager } from './BettingManager';
 import { COLORS } from '@utils/constants';
 import { calculateScale, type ScaleInfo } from '@utils/responsive';
 
@@ -17,7 +16,6 @@ export class GameApplication {
   readonly sound: SoundManager;
   readonly input: InputManager;
   readonly record: RecordManager;
-  readonly betting: BettingManager;
 
   private _scaleInfo: ScaleInfo;
 
@@ -27,7 +25,6 @@ export class GameApplication {
     this.sound = new SoundManager();
     this.input = new InputManager();
     this.record = new RecordManager();
-    this.betting = new BettingManager();
     this._scaleInfo = calculateScale(pixi.screen.width, pixi.screen.height);
     this.applyScale();
   }

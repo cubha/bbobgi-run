@@ -1,14 +1,13 @@
 import { Container, Text, Graphics } from 'pixi.js';
 import { gsap } from 'gsap';
 import { BaseScene } from '@core/BaseScene';
-import type { GameResult, RankingEntry, BettingResult } from '@/types';
+import type { GameResult, RankingEntry } from '@/types';
 import { COLORS, DESIGN_WIDTH, PLAYER_COLORS, FONT_DISPLAY, FONT_BODY } from '@utils/constants';
 import { Button } from '@ui/Button';
 import { ConfettiEffect } from '@effects/ConfettiEffect';
 import { DotGridBackground } from '@ui/DotGridBackground';
 import { SectionLabel } from '@ui/SectionLabel';
 import { StatsPanel } from '@ui/StatsPanel';
-import { BettingResultPanel } from '@ui/BettingResultPanel';
 import type { RecordManager } from '@core/RecordManager';
 
 const MODE_NAMES: Record<string, string> = {
@@ -28,11 +27,9 @@ const MEDALS = ['🥇', '🥈', '🥉'];
 export class ResultScene extends BaseScene {
   private result: GameResult | null = null;
   private record: RecordManager | null = null;
-  private bettingResult: BettingResult | null = null;
   private onReplay: (() => void) | null = null;
   private tweens: gsap.core.Tween[] = [];
   private confetti: ConfettiEffect | null = null;
-  private bettingHeight = 0;
   private statsHeight = 0;
 
   setResult(result: GameResult): void {
@@ -41,10 +38,6 @@ export class ResultScene extends BaseScene {
 
   setRecord(record: RecordManager): void {
     this.record = record;
-  }
-
-  setBettingResult(result: BettingResult): void {
-    this.bettingResult = result;
   }
 
   setReplayCallback(cb: () => void): void {
@@ -70,7 +63,6 @@ export class ResultScene extends BaseScene {
     }
 
     this.buildRankingList(rankings);
-    this.buildBettingSection();
     await this.buildStatsSection();
     this.buildReplayButton();
     this.buildShareButton();
@@ -87,7 +79,6 @@ export class ResultScene extends BaseScene {
     this.confetti = null;
     this.result = null;
     this.record = null;
-    this.bettingResult = null;
     this.onReplay = null;
     super.destroy();
   }
@@ -353,24 +344,6 @@ export class ResultScene extends BaseScene {
     });
   }
 
-  // ─── Betting Result Section ───────────────────
-
-  private buildBettingSection(): void {
-    if (!this.bettingResult || !this.result) return;
-
-    const rankCount = this.result.rankings.length;
-    const sectionY = 224 + 22 + rankCount * 46 + 16;
-    const players = this.result.rankings.map((r) => r.player);
-
-    const panel = new BettingResultPanel({
-      bettingResult: this.bettingResult,
-      players,
-      y: sectionY,
-    });
-    this.container.addChild(panel.container);
-    this.bettingHeight = panel.height + 12;
-  }
-
   // ─── Stats Section ────────────────────────────
 
   private async buildStatsSection(): Promise<void> {
@@ -378,7 +351,7 @@ export class ResultScene extends BaseScene {
 
     const { rankings } = this.result;
     const rankCount = rankings.length;
-    const sectionY = 224 + 22 + rankCount * 46 + 16 + this.bettingHeight;
+    const sectionY = 224 + 22 + rankCount * 46 + 16 ;
 
     const playerNames = rankings.map((r) => r.player.name);
     const [playerStats, overallStats] = await Promise.all([
@@ -399,7 +372,7 @@ export class ResultScene extends BaseScene {
 
   private buildReplayButton(): void {
     const rankCount = this.result?.rankings.length ?? 0;
-    const listBottom = 224 + 22 + rankCount * 46 + 16 + this.bettingHeight + this.statsHeight;
+    const listBottom = 224 + 22 + rankCount * 46 + 16  + this.statsHeight;
     const btnY = Math.max(listBottom, 718);
 
     const btn = new Button({
@@ -427,7 +400,7 @@ export class ResultScene extends BaseScene {
 
   private buildShareButton(): void {
     const rankCount = this.result?.rankings.length ?? 0;
-    const listBottom = 224 + 22 + rankCount * 46 + 16 + this.bettingHeight + this.statsHeight;
+    const listBottom = 224 + 22 + rankCount * 46 + 16  + this.statsHeight;
     const replayBtnY = Math.max(listBottom, 718);
     const btnY = replayBtnY + 64;
 

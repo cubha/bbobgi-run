@@ -22,6 +22,8 @@ export class PhysicsWorld {
   constructor(gravity = { x: 0, y: 1 }) {
     this.engine = Matter.Engine.create({
       gravity,
+      positionIterations: 10,  // 기본 6 → 경사면 정확도 향상
+      velocityIterations: 8,   // 기본 4 → 속도 계산 안정화
     });
     this.world = this.engine.world;
   }
@@ -73,10 +75,10 @@ export class PhysicsWorld {
   /** Create a dynamic circle (marble/ball) */
   static createBall(x: number, y: number, radius: number, options?: Matter.IBodyDefinition): Matter.Body {
     return Matter.Bodies.circle(x, y, radius, {
-      restitution: 0.4,
-      friction: 0.01,
-      frictionAir: 0.007,
-      frictionStatic: 0.1,
+      restitution: 0.5,
+      friction: 0.005,
+      frictionAir: 0.003,
+      frictionStatic: 0.02,
       ...options,
     });
   }

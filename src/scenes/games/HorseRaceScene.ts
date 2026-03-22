@@ -10,7 +10,7 @@ import {
   DESIGN_WIDTH,
   COLORS,
   PLAYER_COLORS,
-  RACE_TRACK,
+  OVAL_TRACK,
   COUNTDOWN_SEC,
   CHAOS_SEC,
   TENSION_SEC,
@@ -24,7 +24,7 @@ import {
 type RacePhase = 'countdown' | 'racing' | 'chaos' | 'tension' | 'slowmo' | 'done';
 
 /**
- * Horse Race game scene — 30-second timeline with phases.
+ * Horse Race game scene — oval/dome track, 30-second timeline with phases.
  */
 export class HorseRaceScene extends BaseScene {
   protected config: GameConfig | null = null;
@@ -130,103 +130,102 @@ export class HorseRaceScene extends BaseScene {
 
   private buildTrack(): void {
     const { players } = this.config!;
-    const trackHeight = players.length * RACE_TRACK.laneHeight;
-    const trackW = RACE_TRACK.finishX - RACE_TRACK.startX;
-    const trackBottom = RACE_TRACK.topY + trackHeight;
+    const { cx, cy, rx, ry, laneWidth } = OVAL_TRACK;
+    const nLanes = players.length;
+    const outerR = ry + nLanes * laneWidth; // vertical outer radius
 
     // Full background
     const bg = new Graphics();
-    bg.rect(0, 0, DESIGN_WIDTH, trackBottom + 20);
+    bg.rect(0, 0, DESIGN_WIDTH, cy + outerR + 80);
     bg.fill(COLORS.background);
     this.trackContainer.addChild(bg);
 
-    // Track base surface
-    const surface = new Graphics();
-    surface.rect(RACE_TRACK.startX, RACE_TRACK.topY, trackW, trackHeight);
-    surface.fill({ color: 0x0d2010 });
-    this.trackContainer.addChild(surface);
+    // Layer 1: Audience area (dark gray, outermost ellipse)
+    const audience = new Graphics();
+    audience.ellipse(cx, cy, (outerR + 60) * (rx / ry), outerR + 60);
+    audience.fill({ color: 0x2a2a2a });
+    this.trackContainer.addChild(audience);
 
-    // Alternating lane shading
-    for (let i = 0; i < players.length; i++) {
-      if (i % 2 === 1) {
-        const laneBg = new Graphics();
-        laneBg.rect(RACE_TRACK.startX, RACE_TRACK.topY + i * RACE_TRACK.laneHeight, trackW, RACE_TRACK.laneHeight);
-        laneBg.fill({ color: 0x112816, alpha: 0.6 });
-        this.trackContainer.addChild(laneBg);
-      }
+    // Layer 2: Track surface (sandy/dirt, covers lane area)
+    const track = new Graphics();
+    track.ellipse(cx, cy, outerR * (rx / ry), outerR);
+    track.fill({ color: 0xc4a060 });
+    this.trackContainer.addChild(track);
+
+    // Layer 3: Inner grass (covers interior of innermost lane)
+    const grass = new Graphics();
+    grass.ellipse(cx, cy, rx * 0.7, ry * 0.7);
+    grass.fill({ color: 0x2d7a3a });
+    this.trackContainer.addChild(grass);
+
+    // Layer 4: Lane divider lines (thin ellipses at each lane boundary)
+    for (let i = 0; i <= nLanes; i++) {
+      const laneR = ry + i * laneWidth;
+      const divider = new Graphics();
+      divider.ellipse(cx, cy, laneR * (rx / ry), laneR);
+      divider.stroke({ color: 0xffffff, width: 0.5, alpha: 0.3 });
+      this.trackContainer.addChild(divider);
     }
 
-    // Lane divider lines
-    for (let i = 0; i <= players.length; i++) {
-      const y = RACE_TRACK.topY + i * RACE_TRACK.laneHeight;
-      const line = new Graphics();
-      line.moveTo(RACE_TRACK.startX, y);
-      line.lineTo(RACE_TRACK.finishX, y);
-      const isBorder = i === 0 || i === players.length;
-      line.stroke({ color: isBorder ? 0x336633 : 0x224422, width: isBorder ? 1.5 : 0.8 });
-      this.trackContainer.addChild(line);
-    }
-
-    // Player name labels (left margin)
+    // Player name labels around inner grass
     players.forEach((player, i) => {
       const color = PLAYER_COLORS[player.id % PLAYER_COLORS.length];
+      const angle = Math.PI + (i / nLanes) * (Math.PI * 0.6) - Math.PI * 0.3;
+      const labelR = ry * 0.5;
       const label = new Text({
         text: player.name,
-        style: { fontFamily: FONT_BODY, fontSize: 10, fontWeight: '700', fill: color },
+        style: { fontFamily: FONT_BODY, fontSize: 9, fontWeight: '700', fill: color },
       });
-      label.anchor.set(1, 0.5);
-      label.x = RACE_TRACK.startX - 5;
-      label.y = RACE_TRACK.topY + i * RACE_TRACK.laneHeight + RACE_TRACK.laneHeight / 2;
+      label.anchor.set(0.5, 0.5);
+      label.x = cx + labelR * Math.cos(angle) * (rx / ry);
+      label.y = cy + labelR * Math.sin(angle);
       this.trackContainer.addChild(label);
     });
 
-    // Start line
-    const startLine = new Graphics();
-    startLine.moveTo(RACE_TRACK.startX, RACE_TRACK.topY);
-    startLine.lineTo(RACE_TRACK.startX, trackBottom);
-    startLine.stroke({ color: COLORS.textDim, width: 1, alpha: 0.5 });
-    this.trackContainer.addChild(startLine);
-
-    // Checkered finish line
-    this.buildCheckerFinish(trackHeight);
-
-    // GOAL label
-    const goalLabel = new Text({
-      text: 'GOAL',
-      style: { fontFamily: FONT_DISPLAY, fontSize: 11, fill: COLORS.gold },
-    });
-    goalLabel.anchor.set(0.5, 1);
-    goalLabel.x = RACE_TRACK.finishX + 1;
-    goalLabel.y = RACE_TRACK.topY - 3;
-    this.trackContainer.addChild(goalLabel);
+    // Layer 5: Finish/start line at theta=PI (leftmost point, checkered)
+    this.buildOvalFinishLine(nLanes);
   }
 
-  private buildCheckerFinish(trackHeight: number): void {
-    const sqSize = 8;
-    const lineWidth = 16;
-    const startX = RACE_TRACK.finishX - lineWidth / 2;
+  private buildOvalFinishLine(nLanes: number): void {
+    const { cx, cy, rx, ry, laneWidth } = OVAL_TRACK;
 
-    for (let fy = 0; fy < trackHeight; fy += sqSize) {
+    // At theta=PI: x = cx - laneRadius*(rx/ry), y = cy for all lanes
+    // Inner lane (i=0) is closest to center; outermost is further left
+    const innerX = cx - ry * (rx / ry);                           // = cx - rx = 50
+    const outerX = cx - (ry + nLanes * laneWidth) * (rx / ry);    // further left
+
+    const lineLeft = Math.min(innerX, outerX);
+    const lineWidth = Math.abs(innerX - outerX);
+    const sqSize = 6;
+    const lineHeight = 20;
+    const startY = cy - lineHeight / 2;
+
+    for (let fy = 0; fy < lineHeight; fy += sqSize) {
       for (let fx = 0; fx < lineWidth; fx += sqSize) {
         const isWhite = (Math.floor(fy / sqSize) + Math.floor(fx / sqSize)) % 2 === 0;
         const sq = new Graphics();
-        sq.rect(startX + fx, RACE_TRACK.topY + fy, sqSize, sqSize);
+        sq.rect(lineLeft + fx, startY + fy, sqSize, sqSize);
         sq.fill({ color: isWhite ? 0xffffff : 0x111111, alpha: isWhite ? 0.95 : 0.7 });
         this.trackContainer.addChild(sq);
       }
     }
 
-    // Gold glow around finish line
-    const glow = new Graphics();
-    glow.moveTo(RACE_TRACK.finishX, RACE_TRACK.topY);
-    glow.lineTo(RACE_TRACK.finishX, RACE_TRACK.topY + trackHeight);
-    glow.stroke({ color: COLORS.gold, width: 2, alpha: 0.4 });
-    this.trackContainer.addChild(glow);
+    // GOAL label above finish line
+    const goalLabel = new Text({
+      text: 'GOAL',
+      style: { fontFamily: FONT_DISPLAY, fontSize: 11, fill: COLORS.gold },
+    });
+    goalLabel.anchor.set(0.5, 1);
+    goalLabel.x = lineLeft + lineWidth / 2;
+    goalLabel.y = startY - 3;
+    this.trackContainer.addChild(goalLabel);
   }
 
   private buildHUD(): void {
+    const { hudHeight } = OVAL_TRACK;
+
     const hudBg = new Graphics();
-    hudBg.rect(0, 0, DESIGN_WIDTH, RACE_TRACK.topY);
+    hudBg.rect(0, 0, DESIGN_WIDTH, hudHeight);
     hudBg.fill({ color: 0x080810 });
     this.uiContainer.addChild(hudBg);
 
@@ -263,6 +262,19 @@ export class HorseRaceScene extends BaseScene {
     this.phaseLabel.x = DESIGN_WIDTH - 14;
     this.phaseLabel.y = 26;
     this.uiContainer.addChild(this.phaseLabel);
+
+    // Player name strip in HUD (compact row)
+    const { players } = this.config!;
+    players.forEach((player, i) => {
+      const color = PLAYER_COLORS[player.id % PLAYER_COLORS.length];
+      const label = new Text({
+        text: player.name,
+        style: { fontFamily: FONT_BODY, fontSize: 9, fontWeight: '700', fill: color },
+      });
+      label.x = 14 + (i % 5) * 70;
+      label.y = 46 + Math.floor(i / 5) * 12;
+      this.uiContainer.addChild(label);
+    });
   }
 
   private buildHorses(): void {
@@ -322,7 +334,7 @@ export class HorseRaceScene extends BaseScene {
     this.sound?.play('chaos');
 
     this.chaos = new ChaosEffect();
-    this.chaos.play(this.uiContainer, RACE_TRACK.topY / 2 + 12);
+    this.chaos.play(this.uiContainer, OVAL_TRACK.hudHeight / 2 + 12);
     this.shaker.shake(this.horseContainer, 5, 6);
   }
 

@@ -5,7 +5,7 @@ import { HorseRaceScene } from '@scenes/games/HorseRaceScene';
 import { MarbleRaceScene } from '@scenes/games/MarbleRaceScene';
 import { LadderScene } from '@scenes/games/LadderScene';
 import { PachinkoScene } from '@scenes/games/PachinkoScene';
-import type { GameConfig, GameResult, GameMode, Player, BettingResult } from './types';
+import type { GameConfig, GameResult, GameMode, Player } from './types';
 import type { BaseScene } from '@core/BaseScene';
 
 type GameScene = BaseScene & {
@@ -43,37 +43,27 @@ async function main() {
 
   /** Start a game with given config */
   async function startGame(config: GameConfig) {
-    app.betting.lockBetting();
-
     const scene = createGameScene(config.mode);
     scene.setConfig(config);
     scene.setEndCallback((result: GameResult) => {
-      const winnerId = result.rankings.find((r) => r.rank === 1)?.player.id;
-      const bettingResult =
-        winnerId !== undefined && app.betting.hasBets
-          ? app.betting.settle(winnerId)
-          : null;
-      showResult(result, bettingResult);
+      showResult(result);
     });
     scene.setSound(app.sound);
     await app.scenes.transition(scene);
   }
 
   /** Show result screen */
-  async function showResult(result: GameResult, bettingResult?: BettingResult | null) {
+  async function showResult(result: GameResult) {
     app.record.saveResult(result).catch(console.warn);
 
     const scene = new ResultScene();
     scene.setResult(result);
     scene.setRecord(app.record);
-    if (bettingResult) scene.setBettingResult(bettingResult);
     scene.setReplayCallback(() => {
       showMenu(result.rankings.map((r) => r.player));
     });
     scene.setSound(app.sound);
     await app.scenes.transition(scene);
-
-    app.betting.reset();
   }
 
   // Boot
