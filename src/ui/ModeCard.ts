@@ -12,7 +12,6 @@ export interface ModeCardOptions {
 
 const CARD_WIDTH = 172;
 const CARD_HEIGHT = 125;
-const BORDER_RADIUS = 13;
 
 const MODE_EMOJIS: Record<GameMode, string> = {
   horse: '🐎',
@@ -26,12 +25,13 @@ const MODE_EMOJIS: Record<GameMode, string> = {
  */
 export class ModeCard {
   private readonly _container: Container;
-  private readonly outerGlow: Graphics;
   private readonly borderLine: Graphics;
   private readonly modeInfo: GameModeInfo;
   private readonly active: boolean;
   private readonly onClick: (mode: GameMode) => void;
   private _selected: boolean;
+  private _hovered: boolean = false;
+  private _baseY: number | null = null;
 
   constructor(options: ModeCardOptions) {
     this.modeInfo = options.modeInfo;
@@ -41,19 +41,15 @@ export class ModeCard {
 
     this._container = new Container();
 
-    // Glow (selected state)
-    this.outerGlow = new Graphics();
-    this._container.addChild(this.outerGlow);
-
-    // Card shadow
+    // Card shadow (dot offset)
     const shadow = new Graphics();
-    shadow.roundRect(3, 5, CARD_WIDTH, CARD_HEIGHT, BORDER_RADIUS);
+    shadow.rect(2, 2, CARD_WIDTH, CARD_HEIGHT);
     shadow.fill({ color: 0x000000, alpha: 0.3 });
     this._container.addChild(shadow);
 
     // Card body
     const cardBg = new Graphics();
-    cardBg.roundRect(0, 0, CARD_WIDTH, CARD_HEIGHT, BORDER_RADIUS);
+    cardBg.rect(0, 0, CARD_WIDTH, CARD_HEIGHT);
     cardBg.fill({ color: COLORS.accent });
     this._container.addChild(cardBg);
 
@@ -117,7 +113,7 @@ export class ModeCard {
     // Inactive overlay
     if (!this.active) {
       const overlay = new Graphics();
-      overlay.roundRect(0, 0, CARD_WIDTH, CARD_HEIGHT, BORDER_RADIUS);
+      overlay.rect(0, 0, CARD_WIDTH, CARD_HEIGHT);
       overlay.fill({ color: 0x000000, alpha: 0.55 });
       this._container.addChild(overlay);
 
@@ -143,11 +139,13 @@ export class ModeCard {
       this._container.on('pointertap', () => this.onClick(this.modeInfo.mode));
       this._container.on('pointerover', () => {
         if (!this._selected) {
-          gsap.to(this._container.scale, { x: 1.03, y: 1.03, duration: 0.15, ease: 'power2.out' });
+          this._hovered = true;
+          this.drawBorder();
         }
       });
       this._container.on('pointerout', () => {
-        gsap.to(this._container.scale, { x: 1, y: 1, duration: 0.2, ease: 'power2.out' });
+        this._hovered = false;
+        this.drawBorder();
       });
     } else {
       this._container.eventMode = 'none';
@@ -159,27 +157,26 @@ export class ModeCard {
   }
 
   setSelected(selected: boolean): void {
+    if (this._baseY === null) this._baseY = this._container.y;
     this._selected = selected;
+    this._hovered = false;
     this.drawBorder();
     if (selected) {
-      gsap.to(this._container.scale, { x: 1.04, y: 1.04, duration: 0.2, ease: 'back.out(2)' });
+      gsap.to(this._container, { y: this._baseY - 2, duration: 0.15, ease: 'power2.out' });
     } else {
-      gsap.to(this._container.scale, { x: 1, y: 1, duration: 0.15, ease: 'power2.out' });
+      gsap.to(this._container, { y: this._baseY, duration: 0.15, ease: 'power2.out' });
     }
   }
 
   private drawBorder(): void {
-    this.outerGlow.clear();
     this.borderLine.clear();
 
     if (this._selected) {
-      for (let i = 2; i >= 1; i--) {
-        const exp = i * 3;
-        this.outerGlow.roundRect(-exp, -exp, CARD_WIDTH + exp * 2, CARD_HEIGHT + exp * 2, BORDER_RADIUS + exp);
-        this.outerGlow.fill({ color: COLORS.primary, alpha: 0.08 * (3 - i) });
-      }
-      this.borderLine.roundRect(-1.5, -1.5, CARD_WIDTH + 3, CARD_HEIGHT + 3, BORDER_RADIUS + 1.5);
-      this.borderLine.stroke({ width: 2.5, color: COLORS.primary, alpha: 0.9 });
+      this.borderLine.rect(-2, -2, CARD_WIDTH + 4, CARD_HEIGHT + 4);
+      this.borderLine.stroke({ width: 2, color: COLORS.primary, alpha: 0.9 });
+    } else if (this._hovered) {
+      this.borderLine.rect(-2, -2, CARD_WIDTH + 4, CARD_HEIGHT + 4);
+      this.borderLine.stroke({ width: 2, color: COLORS.textDim, alpha: 0.7 });
     }
   }
 }

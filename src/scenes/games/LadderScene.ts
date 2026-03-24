@@ -7,11 +7,13 @@ import { SeededRandom } from '@utils/random';
 import type { GameConfig, GameResult, RankingEntry } from '@/types';
 import {
   DESIGN_WIDTH,
+  DESIGN_HEIGHT,
   COLORS,
   PLAYER_COLORS,
   FONT_DISPLAY,
   FONT_BODY,
 } from '@utils/constants';
+import type { ScaleInfo } from '@utils/responsive';
 
 /** Horizontal rung connecting col ↔ col+span */
 interface Rung {
@@ -59,6 +61,7 @@ const BASE_PPS = (BOT_Y - TOP_Y) / TRACE_SEC;
 export class LadderScene extends BaseScene {
   protected config: GameConfig | null = null;
   protected endCallback: ((result: GameResult) => void) | null = null;
+  private _scaleInfo: ScaleInfo | null = null;
 
   private countdown: CountdownEffect | null = null;
   private timelines: gsap.core.Timeline[] = [];
@@ -71,6 +74,10 @@ export class LadderScene extends BaseScene {
 
   setEndCallback(cb: (result: GameResult) => void): void {
     this.endCallback = cb;
+  }
+
+  setScaleInfo(s: ScaleInfo): void {
+    this._scaleInfo = s;
   }
 
   async init(): Promise<void> {
@@ -89,7 +96,7 @@ export class LadderScene extends BaseScene {
     this.buildHUD();
     const { rungGraphics, ladderContainer } = this.buildLadder(n, rungs, warps, bursts, mapping);
 
-    this.countdown = new CountdownEffect(this.container);
+    this.countdown = new CountdownEffect(this.container, this._scaleInfo ?? undefined);
     this.countdown.play(() => {
       this.countdown = null;
       this.sound?.play('race-start');
@@ -272,7 +279,7 @@ export class LadderScene extends BaseScene {
 
   private buildBackground(): void {
     const bg = new Graphics();
-    bg.rect(0, 0, DESIGN_WIDTH, 844);
+    bg.rect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
     bg.fill(COLORS.background);
     this.container.addChild(bg);
   }
@@ -284,12 +291,12 @@ export class LadderScene extends BaseScene {
     this.container.addChild(hudBg);
 
     const timerBg = new Graphics();
-    timerBg.roundRect(14, 10, DESIGN_WIDTH - 28, 7, 3);
-    timerBg.fill({ color: 0x222233, alpha: 0.9 });
+    timerBg.rect(14, 10, DESIGN_WIDTH - 28, 7);
+    timerBg.fill({ color: COLORS.secondary, alpha: 0.9 });
     this.container.addChild(timerBg);
 
     const timerFill = new Graphics();
-    timerFill.roundRect(14, 10, DESIGN_WIDTH - 28, 7, 3);
+    timerFill.rect(14, 10, DESIGN_WIDTH - 28, 7);
     timerFill.fill({ color: COLORS.gold, alpha: 0.9 });
     this.container.addChild(timerFill);
 
@@ -439,9 +446,9 @@ export class LadderScene extends BaseScene {
 
   private addBurstMarker(parent: Container, x: number, y: number): void {
     const g = new Graphics();
-    g.circle(x, y, 8);
-    g.fill({ color: 0xff2d55, alpha: 0.9 });
-    g.stroke({ color: 0xff8800, width: 1.5 });
+    g.rect(x - 6, y - 6, 12, 12);
+    g.fill({ color: COLORS.primary, alpha: 0.9 });
+    g.stroke({ color: COLORS.orange, width: 2 });
     parent.addChild(g);
 
     gsap.to(g, {
@@ -514,9 +521,9 @@ export class LadderScene extends BaseScene {
     tracerContainer.addChild(line);
 
     const dot = new Graphics();
-    dot.circle(0, 0, 6);
+    dot.rect(-6, -6, 12, 12);
     dot.fill({ color });
-    dot.stroke({ color: 0xffffff, width: 1.5 });
+    dot.stroke({ color: COLORS.text, width: 2 });
     tracerContainer.addChild(dot);
     dot.position.set(points[0].x, points[0].y);
 
@@ -633,7 +640,7 @@ export class LadderScene extends BaseScene {
         fontFamily: FONT_DISPLAY,
         fontSize: 28,
         fill: col,
-        dropShadow: { color: col, blur: 20, distance: 0, angle: 0, alpha: 0.8 },
+        dropShadow: { color: col, blur: 0, distance: 2, angle: Math.PI / 2, alpha: 0.8 },
       },
     });
     flash.anchor.set(0.5);

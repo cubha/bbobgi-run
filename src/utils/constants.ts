@@ -2,9 +2,9 @@
 export const DESIGN_WIDTH = 390;
 export const DESIGN_HEIGHT = 844;
 
-/** Typography */
-export const FONT_DISPLAY = 'Black Han Sans, Noto Sans KR, sans-serif';
-export const FONT_BODY = 'Noto Sans KR, sans-serif';
+/** Typography — 도트(픽셀아트) 폰트 */
+export const FONT_DISPLAY = 'Galmuri14, Galmuri11, monospace';
+export const FONT_BODY = 'Galmuri11, Galmuri14, monospace';
 
 /** Game timing */
 export const GAME_DURATION_SEC = 30;
@@ -22,35 +22,74 @@ export const MAX_PLAYERS = 10;
 /** Oval track layout for horse racing (design resolution) */
 export const OVAL_TRACK = {
   cx: 195,         // track center x
-  cy: 400,         // track center y
-  rx: 145,         // horizontal radius
-  ry: 190,         // vertical radius
-  laneWidth: 18,   // width per lane
+  cy: 380,         // track center y
+  rx: 170,         // horizontal radius (landscape: rx > ry)
+  ry: 115,         // vertical radius
+  laneWidth: 15,   // width per lane
   laps: 2,         // number of laps
-  hudHeight: 70,   // HUD area height at top
+  hudHeight: 62,   // HUD area height at top
 } as const;
 
-/** Colors */
+/** Horse race 3-zone layout */
+export const HORSE_LAYOUT = {
+  hudH: 60,        // top HUD height
+  trackTop: 60,    // track area starts after HUD
+  trackH: 520,     // track area height
+  rankTop: 580,    // rank panel starts here
+  rankH: 264,      // rank panel height (to 844)
+  laneWidth: 15,   // lane width per player
+  ratio: 1.48,     // landscape aspect ratio (rx/ry)
+  laps: 2,
+} as const;
+
+/** Compute dynamic track params based on player count and optional lap override */
+export function computeTrackParams(nLanes: number, lapCount?: number): import('@/types').TrackParams {
+  const halfTrack = HORSE_LAYOUT.trackH / 2;  // 260
+  const { laneWidth, ratio, laps } = HORSE_LAYOUT;
+  const ry = halfTrack - nLanes * laneWidth;
+  const rx = ry * ratio;
+  return {
+    cx: DESIGN_WIDTH / 2,
+    cy: HORSE_LAYOUT.trackTop + halfTrack,
+    rx,
+    ry,
+    laneWidth,
+    laps: lapCount ?? laps,
+    ratio,
+  };
+}
+
+/** Colors — PICO-8 기반 도트 팔레트 */
 export const COLORS = {
-  background: 0x0d0d1a,
-  primary: 0xff2d55,
-  secondary: 0x0f3460,
-  accent: 0x16213e,
-  gold: 0xffd700,
-  text: 0xffffff,
-  textDim: 0xaaaaaa,
+  background: 0x000000,   // PICO-8 #0 Black
+  primary: 0xff004d,      // PICO-8 #8 Red
+  secondary: 0x1d2b53,    // PICO-8 #1 Dark Blue
+  accent: 0x1d2b53,       // PICO-8 #1 Dark Blue
+  gold: 0xffec27,         // PICO-8 #10 Yellow
+  text: 0xfff1e8,         // PICO-8 #7 White
+  textDim: 0xc2c3c7,      // PICO-8 #6 Light Gray
+  darkGray: 0x5f574f,     // PICO-8 #5 Dark Gray
+  green: 0x008751,        // PICO-8 #3 Dark Green
+  brightGreen: 0x00e436,  // PICO-8 #11 Green
+  blue: 0x29adff,         // PICO-8 #12 Blue
+  lavender: 0x83769c,     // PICO-8 #13 Lavender
+  pink: 0xff77a8,         // PICO-8 #14 Pink
+  peach: 0xffccaa,        // PICO-8 #15 Peach
+  orange: 0xffa300,       // PICO-8 #9 Orange
+  purple: 0x7e2553,       // PICO-8 #2 Dark Purple
+  brown: 0xab5236,        // PICO-8 #4 Brown
 } as const;
 
-/** Player colors (up to 10) */
+/** Player colors — PICO-8 팔레트 (up to 10) */
 export const PLAYER_COLORS = [
-  0xe94560, // red
-  0x3498db, // blue
-  0x2ecc71, // green
-  0xf39c12, // orange
-  0x9b59b6, // purple
-  0x1abc9c, // teal
-  0xe67e22, // dark orange
-  0xe74c3c, // crimson
-  0x2980b9, // dark blue
-  0x27ae60, // dark green
+  0xff004d, // #8  Red
+  0x29adff, // #12 Blue
+  0x00e436, // #11 Green
+  0xffa300, // #9  Orange
+  0x7e2553, // #2  Dark Purple
+  0x008751, // #3  Dark Green
+  0xffec27, // #10 Yellow
+  0xff77a8, // #14 Pink
+  0x1d2b53, // #1  Dark Blue
+  0xffccaa, // #15 Peach
 ] as const;

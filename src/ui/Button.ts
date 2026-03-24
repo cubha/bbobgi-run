@@ -1,4 +1,4 @@
-import { Container, Graphics, Text, FillGradient } from 'pixi.js';
+import { Container, Graphics, Text } from 'pixi.js';
 import { gsap } from 'gsap';
 import { COLORS, FONT_DISPLAY } from '@utils/constants';
 
@@ -7,25 +7,24 @@ export interface ButtonOptions {
   width?: number;
   height?: number;
   color?: number;
-  colorEnd?: number;
   onClick: () => void;
 }
 
 /**
- * Reusable button with gradient background, glow on hover, GSAP press animation.
+ * Dot-style button with solid fill, 3D pixel border, and classic press animation.
  */
 export class Button {
   readonly container: Container;
 
   private readonly bg: Graphics;
-  private readonly glowBg: Graphics;
+  private readonly border: Graphics;
   private readonly text: Text;
   private readonly color: number;
-  private readonly colorEnd: number;
   private readonly btnWidth: number;
   private readonly btnHeight: number;
   private readonly onClick: () => void;
   private _disabled = false;
+  private _pressed = false;
 
   constructor(options: ButtonOptions) {
     const {
@@ -33,33 +32,25 @@ export class Button {
       width = 200,
       height = 52,
       color = COLORS.primary,
-      colorEnd,
       onClick,
     } = options;
 
     this.color = color;
-    this.colorEnd = colorEnd ?? this.lighten(color, 0.15);
     this.btnWidth = width;
     this.btnHeight = height;
     this.onClick = onClick;
 
     this.container = new Container();
 
-    // Glow background (slightly larger, same color at low alpha)
-    this.glowBg = new Graphics();
-    this.drawGlow(0);
-    this.container.addChild(this.glowBg);
-
-    // Main button background (gradient)
+    // Main button background (solid rect)
     this.bg = new Graphics();
     this.drawBg();
     this.container.addChild(this.bg);
 
-    // Highlight overlay — thin bright strip at top
-    const highlight = new Graphics();
-    highlight.roundRect(3, 2, width - 6, height / 3, 8);
-    highlight.fill({ color: 0xffffff, alpha: 0.12 });
-    this.container.addChild(highlight);
+    // 3D dot-style border overlay
+    this.border = new Graphics();
+    this.drawBorder(COLORS.textDim);
+    this.container.addChild(this.border);
 
     // Label
     this.text = new Text({
@@ -69,7 +60,7 @@ export class Button {
         fontSize: 20,
         fontWeight: 'bold',
         fill: COLORS.text,
-        dropShadow: { color: 0x000000, blur: 4, distance: 2, angle: Math.PI / 2, alpha: 0.6 },
+        dropShadow: { color: 0x000000, blur: 0, distance: 2, angle: Math.PI / 2, alpha: 0.6 },
       },
     });
     this.text.anchor.set(0.5);
@@ -90,59 +81,54 @@ export class Button {
 
   private drawBg(): void {
     this.bg.clear();
-    const gradient = new FillGradient({
-      type: 'linear',
-      start: { x: 0, y: 0 },
-      end: { x: 0, y: 1 },
-      colorStops: [
-        { offset: 0, color: this.colorEnd },
-        { offset: 1, color: this.color },
-      ],
-    });
-    this.bg.roundRect(0, 0, this.btnWidth, this.btnHeight, 14);
-    this.bg.fill(gradient);
-    // Border
-    this.bg.roundRect(0, 0, this.btnWidth, this.btnHeight, 14);
-    this.bg.stroke({ color: this.lighten(this.color, 0.25), width: 1.5, alpha: 0.6 });
+    this.bg.rect(0, 0, this.btnWidth, this.btnHeight);
+    this.bg.fill({ color: this.color });
   }
 
-  private drawGlow(alpha: number): void {
-    this.glowBg.clear();
-    if (alpha <= 0) return;
-    for (let i = 3; i >= 1; i--) {
-      const expand = i * 4;
-      this.glowBg.roundRect(-expand, -expand, this.btnWidth + expand * 2, this.btnHeight + expand * 2, 14 + expand);
-      this.glowBg.fill({ color: this.color, alpha: (alpha * 0.12) / i });
-    }
-  }
-
-  private lighten(color: number, amount: number): number {
-    const r = Math.min(255, ((color >> 16) & 0xff) + Math.round(255 * amount));
-    const g = Math.min(255, ((color >> 8) & 0xff) + Math.round(255 * amount));
-    const b = Math.min(255, (color & 0xff) + Math.round(255 * amount));
-    return (r << 16) | (g << 8) | b;
+  private drawBorder(borderColor: number): void {
+    this.border.clear();
+    const w = this.btnWidth;
+    const h = this.btnHeight;
+    // Top edge (bright)
+    this.border.rect(0, 0, w, 2);
+    this.border.fill({ color: borderColor, alpha: 0.9 });
+    // Left edge (bright)
+    this.border.rect(0, 0, 2, h);
+    this.border.fill({ color: borderColor, alpha: 0.9 });
+    // Bottom edge (dark)
+    this.border.rect(0, h - 2, w, 2);
+    this.border.fill({ color: 0x000000, alpha: 0.5 });
+    // Right edge (dark)
+    this.border.rect(w - 2, 0, 2, h);
+    this.border.fill({ color: 0x000000, alpha: 0.5 });
   }
 
   private handleOver(): void {
     if (this._disabled) return;
-    this.drawGlow(1);
-    gsap.to(this.container.scale, { x: 1.02, y: 1.02, duration: 0.15, ease: 'power2.out' });
+    this.drawBorder(COLORS.gold);
   }
 
   private handleOut(): void {
     if (this._disabled) return;
-    this.drawGlow(0);
-    gsap.to(this.container.scale, { x: 1, y: 1, duration: 0.2, ease: 'power2.out' });
+    this.drawBorder(COLORS.textDim);
+    if (this._pressed) {
+      this.container.y -= 2;
+      this._pressed = false;
+    }
   }
 
   private handleDown(): void {
     if (this._disabled) return;
-    gsap.to(this.container.scale, { x: 0.95, y: 0.95, duration: 0.08, ease: 'power2.out' });
+    this._pressed = true;
+    gsap.killTweensOf(this.container);
+    this.container.y += 2;
   }
 
   private handleUp(): void {
-    if (this._disabled) return;
-    gsap.to(this.container.scale, { x: 1.02, y: 1.02, duration: 0.18, ease: 'back.out(2)' });
+    if (this._disabled || !this._pressed) return;
+    this._pressed = false;
+    gsap.killTweensOf(this.container);
+    this.container.y -= 2;
   }
 
   private handleTap(): void {
@@ -156,6 +142,7 @@ export class Button {
     this.container.cursor = 'pointer';
     this.container.eventMode = 'static';
     this.drawBg();
+    this.drawBorder(COLORS.textDim);
   }
 
   disable(): void {

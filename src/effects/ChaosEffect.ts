@@ -12,7 +12,7 @@ export class ChaosEffect {
         fontFamily: FONT_DISPLAY,
         fontSize: 28,
         fill: COLORS.primary,
-        dropShadow: { color: COLORS.primary, blur: 12, distance: 0, angle: 0, alpha: 0.8 },
+        dropShadow: { color: COLORS.primary, blur: 0, distance: 2, angle: Math.PI / 2, alpha: 0.8 },
       },
     });
     chaosText.anchor.set(0.5);

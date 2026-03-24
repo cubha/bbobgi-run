@@ -61,27 +61,23 @@ export class NameInput {
     Object.assign(this.input.style, {
       width: '100%',
       padding: '11px 16px',
-      fontSize: '16px',
-      fontFamily: 'Noto Sans KR, sans-serif',
+      fontSize: '14px',
+      fontFamily: 'Galmuri11, Galmuri14, monospace',
       fontWeight: '700',
-      border: '2px solid #ff2d55',
-      borderRadius: '12px',
-      background: '#16213e',
-      color: '#ffffff',
+      border: '2px solid #ff004d',
+      borderRadius: '0',
+      background: '#1d2b53',
+      color: '#fff1e8',
       outline: 'none',
       boxSizing: 'border-box',
-      boxShadow: '0 0 12px rgba(255,45,85,0.25), inset 0 1px 4px rgba(0,0,0,0.4)',
-      transition: 'border-color 0.2s, box-shadow 0.2s',
     } satisfies Partial<CSSStyleDeclaration>);
 
     // Focus / blur effects
     this.input.addEventListener('focus', () => {
-      this.input.style.borderColor = '#ff6080';
-      this.input.style.boxShadow = '0 0 18px rgba(255,45,85,0.45), inset 0 1px 4px rgba(0,0,0,0.4)';
+      this.input.style.borderColor = '#ff77a8';
     });
     this.input.addEventListener('blur', () => {
-      this.input.style.borderColor = '#ff2d55';
-      this.input.style.boxShadow = '0 0 12px rgba(255,45,85,0.25), inset 0 1px 4px rgba(0,0,0,0.4)';
+      this.input.style.borderColor = '#ff004d';
     });
     this.wrapper.appendChild(this.input);
 
@@ -92,16 +88,16 @@ export class NameInput {
       justifyContent: 'space-between',
       alignItems: 'center',
       marginTop: '6px',
-      fontSize: '12px',
-      fontFamily: 'Noto Sans KR, sans-serif',
+      fontSize: '11px',
+      fontFamily: 'Galmuri11, Galmuri14, monospace',
     } satisfies Partial<CSSStyleDeclaration>);
 
     const hint = document.createElement('span');
     hint.textContent = `최소 ${MIN_PLAYERS}명`;
-    hint.style.color = '#aaaaaa';
+    hint.style.color = '#c2c3c7';
 
     const count = document.createElement('span');
-    count.style.color = '#ff2d55';
+    count.style.color = '#ff004d';
     count.style.fontWeight = '700';
     count.textContent = `0 / ${MAX_PLAYERS}명`;
     this.counter.appendChild(hint);
@@ -114,7 +110,7 @@ export class NameInput {
         e.preventDefault();
         this.addName();
         count.textContent = `${this.players.length} / ${MAX_PLAYERS}명`;
-        count.style.color = this.players.length >= MIN_PLAYERS ? '#2ecc71' : '#ff2d55';
+        count.style.color = this.players.length >= MIN_PLAYERS ? '#00e436' : '#ff004d';
       }
     });
 
@@ -133,7 +129,7 @@ export class NameInput {
         this.renderChip(player);
       }
       count.textContent = `${this.players.length} / ${MAX_PLAYERS}명`;
-      count.style.color = this.players.length >= MIN_PLAYERS ? '#2ecc71' : '#ff2d55';
+      count.style.color = this.players.length >= MIN_PLAYERS ? '#00e436' : '#ff004d';
       this.updateInputState();
       this.onChange([...this.players]);
     }
@@ -167,15 +163,15 @@ export class NameInput {
       display: 'inline-flex',
       alignItems: 'center',
       gap: '5px',
-      padding: '5px 11px',
+      padding: '4px 10px',
       background: `${colorHex}22`,
-      border: `1.5px solid ${colorHex}99`,
-      color: '#ffffff',
-      borderRadius: '20px',
-      fontSize: '13px',
-      fontFamily: 'Noto Sans KR, sans-serif',
+      border: `2px solid ${colorHex}`,
+      color: '#fff1e8',
+      borderRadius: '0',
+      fontSize: '12px',
+      fontFamily: 'Galmuri11, Galmuri14, monospace',
       fontWeight: '700',
-      animation: 'chipPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+      animation: 'chipPop 0.15s ease-out',
     } satisfies Partial<CSSStyleDeclaration>);
 
     // Inject keyframe if not already present
@@ -194,8 +190,7 @@ export class NameInput {
     // Rank dot
     const dot = document.createElement('span');
     dot.style.cssText = `
-      width: 8px; height: 8px;
-      border-radius: 50%;
+      width: 6px; height: 6px;
       background: ${colorHex};
       flex-shrink: 0;
     `;
@@ -210,13 +205,12 @@ export class NameInput {
     Object.assign(removeBtn.style, {
       cursor: 'pointer',
       marginLeft: '1px',
-      fontSize: '15px',
+      fontSize: '14px',
       lineHeight: '1',
-      color: '#aaaaaa',
-      transition: 'color 0.15s',
+      color: '#c2c3c7',
     } satisfies Partial<CSSStyleDeclaration>);
-    removeBtn.addEventListener('mouseover', () => { removeBtn.style.color = '#ff2d55'; });
-    removeBtn.addEventListener('mouseout', () => { removeBtn.style.color = '#aaaaaa'; });
+    removeBtn.addEventListener('mouseover', () => { removeBtn.style.color = '#ff004d'; });
+    removeBtn.addEventListener('mouseout', () => { removeBtn.style.color = '#c2c3c7'; });
     removeBtn.addEventListener('click', () => this.removePlayer(player.id));
     chip.appendChild(removeBtn);
 
@@ -237,7 +231,7 @@ export class NameInput {
     const countEl = this.counter.querySelector<HTMLElement>('span:last-child');
     if (countEl) {
       countEl.textContent = `${this.players.length} / ${MAX_PLAYERS}명`;
-      countEl.style.color = this.players.length >= MIN_PLAYERS ? '#2ecc71' : '#ff2d55';
+      countEl.style.color = this.players.length >= MIN_PLAYERS ? '#00e436' : '#ff004d';
     }
 
     this.updateInputState();
@@ -248,7 +242,7 @@ export class NameInput {
     if (this.players.length >= MAX_PLAYERS) {
       this.input.disabled = true;
       this.input.placeholder = `최대 ${MAX_PLAYERS}명`;
-      this.input.style.borderColor = '#555555';
+      this.input.style.borderColor = '#5f574f';
       this.input.style.boxShadow = 'none';
       this.input.style.opacity = '0.5';
     } else {

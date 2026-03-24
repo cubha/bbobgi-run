@@ -1,4 +1,4 @@
-import { Application as PixiApp } from 'pixi.js';
+import { Application as PixiApp, TextureStyle } from 'pixi.js';
 import { SceneManager } from './SceneManager';
 import { SoundManager } from './SoundManager';
 import { InputManager } from './InputManager';
@@ -31,16 +31,22 @@ export class GameApplication {
 
   /** Async factory — PixiJS v8 requires async init */
   static async create(container: HTMLElement): Promise<GameApplication> {
+    // 픽셀아트: nearest neighbor 텍스처 필터링 (텍스처 생성 전 설정 필수)
+    TextureStyle.defaultOptions.scaleMode = 'nearest';
+
     const pixi = new PixiApp();
 
     await pixi.init({
       background: COLORS.background,
       resizeTo: container,
-      antialias: true,
-      resolution: window.devicePixelRatio,
+      antialias: false,
+      resolution: 1,
       autoDensity: true,
+      roundPixels: true,
     });
 
+    // 픽셀아트: CSS 업스케일 시 선명한 픽셀 유지
+    pixi.canvas.style.imageRendering = 'pixelated';
     container.appendChild(pixi.canvas);
 
     const app = new GameApplication(pixi);

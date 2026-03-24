@@ -81,22 +81,30 @@ export class Marble {
   private drawMarble(): void {
     const g = this.bodyGfx;
     const r = this.radius;
+    const dark = this.darken(this.color, 0.4);
 
-    // Shadow
-    g.ellipse(1, 2, r, r * 0.6);
+    // Shadow (offset rect)
+    g.rect(-r + 2, -r + 2, r * 2, r * 2);
     g.fill({ color: 0x000000, alpha: 0.25 });
 
-    // Main circle
-    g.circle(0, 0, r);
+    // Main square (dot-style)
+    g.rect(-r, -r, r * 2, r * 2);
     g.fill({ color: this.color });
 
-    // Inner highlight (glossy effect)
-    g.circle(-r * 0.25, -r * 0.25, r * 0.45);
-    g.fill({ color: 0xffffff, alpha: 0.3 });
+    // Top-left highlight (2px dot)
+    g.rect(-r + 2, -r + 2, 4, 4);
+    g.fill({ color: 0xffffff, alpha: 0.8 });
 
-    // Small specular dot
-    g.circle(-r * 0.3, -r * 0.35, r * 0.15);
-    g.fill({ color: 0xffffff, alpha: 0.6 });
+    // Bottom-right shadow dot
+    g.rect(r - 4, r - 4, 4, 4);
+    g.fill({ color: dark });
+  }
+
+  private darken(color: number, amount: number): number {
+    const r = Math.max(0, ((color >> 16) & 0xff) - Math.round(255 * amount));
+    const g = Math.max(0, ((color >> 8) & 0xff) - Math.round(255 * amount));
+    const b = Math.max(0, (color & 0xff) - Math.round(255 * amount));
+    return (r << 16) | (g << 8) | b;
   }
 
   destroy(): void {

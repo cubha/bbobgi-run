@@ -1,7 +1,23 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { SeededRandom } from '@utils/random';
-import { OVAL_TRACK, PLAYER_COLORS } from '@utils/constants';
-import type { Player } from '@/types';
+import { PLAYER_COLORS, COLORS, FONT_BODY, FONT_DISPLAY } from '@utils/constants';
+import type { Player, TrackParams } from '@/types';
+
+export type HorseEventType = 'none' | 'wipeout' | 'nitro' | 'reverse';
+
+const EVENT_DURATION: Record<HorseEventType, number> = {
+  none: 0,
+  wipeout: 2.0,
+  nitro: 2.5,
+  reverse: 1.0,
+};
+
+const EVENT_ICON: Record<HorseEventType, string> = {
+  none: '',
+  wipeout: '⭐ 넘어짐!',
+  nitro: '🔥 NITRO!',
+  reverse: '?! 역주행',
+};
 
 export class Horse {
   readonly container: Container;
@@ -14,41 +30,52 @@ export class Horse {
   private readonly baseSpeed: number;
   private readonly color: number;
   private bodyGfx: Graphics;
+  private eventIconText: Text;
   private elapsed: number = 0;
 
   // Oval track fields
-  private theta: number = Math.PI;    // start angle (left-center of oval)
-  private totalAngle: number = 0;     // cumulative rotation angle
-  private readonly laneRadius: number; // this horse's lane radius (vertical semi-axis)
+  private theta: number = Math.PI;
+  private totalAngle: number = 0;
+  private readonly laneRadius: number;
+  private readonly trackParams: TrackParams;
 
-  constructor(player: Player, laneIndex: number, seed: number) {
+  // Event state
+  private _eventType: HorseEventType = 'none';
+  private eventTimer: number = 0;
+
+  constructor(player: Player, laneIndex: number, seed: number, trackParams: TrackParams) {
     this.player = player;
     this.rng = new SeededRandom(seed);
     this.color = PLAYER_COLORS[player.id % PLAYER_COLORS.length];
+    this.trackParams = trackParams;
 
-    // laneRadius: base ry + lane offset
-    this.laneRadius = OVAL_TRACK.ry + laneIndex * OVAL_TRACK.laneWidth;
+    this.laneRadius = trackParams.ry + laneIndex * trackParams.laneWidth;
 
-    // baseSpeed: 0.08~0.12 rad/sec (upscaled from 0.015~0.025)
-    this.baseSpeed = this.rng.range(0.08, 0.12);
+    // baseSpeed: 0.40~0.58 rad/sec → 2 laps in ~22-31 seconds
+    this.baseSpeed = this.rng.range(0.40, 0.58);
     this.currentSpeed = this.baseSpeed;
 
     this.container = new Container();
     this.bodyGfx = new Graphics();
     this.container.addChild(this.bodyGfx);
 
-    // Name label below the horse
+    // Event icon above horse
+    this.eventIconText = new Text({
+      text: '',
+      style: { fontFamily: FONT_DISPLAY, fontSize: 9, fill: COLORS.gold },
+    });
+    this.eventIconText.anchor.set(0.5, 1);
+    this.eventIconText.y = -34;
+    this.eventIconText.visible = false;
+    this.container.addChild(this.eventIconText);
+
+    // Name label below horse
     const nameText = new Text({
       text: player.name,
-      style: {
-        fontFamily: 'Noto Sans KR, sans-serif',
-        fontSize: 10,
-        fontWeight: '700',
-        fill: this.color,
-      },
+      style: { fontFamily: FONT_BODY, fontSize: 10, fontWeight: '700', fill: this.color },
     });
     nameText.anchor.set(0.5, 0);
-    nameText.y = 16;
+    nameText.y = 18;
     this.container.addChild(nameText);
 
     this.drawHorse(0);
@@ -56,54 +83,87 @@ export class Horse {
     this.container.y = this.y;
   }
 
-  // x/y getters: parametric ellipse with lane-scaled radii
   get x(): number {
-    return OVAL_TRACK.cx + this.laneRadius * Math.cos(this.theta) * (OVAL_TRACK.rx / OVAL_TRACK.ry);
+    return this.trackParams.cx + this.laneRadius * Math.cos(this.theta) * this.trackParams.ratio;
   }
 
   get y(): number {
-    return OVAL_TRACK.cy + this.laneRadius * Math.sin(this.theta);
+    return this.trackParams.cy + this.laneRadius * Math.sin(this.theta);
   }
 
-  // progress: cumulative angle / (2π * laps)
   get progress(): number {
-    return this.totalAngle / (Math.PI * 2 * OVAL_TRACK.laps);
+    return this.totalAngle / (Math.PI * 2 * this.trackParams.laps);
   }
 
   get finished(): boolean {
     return this._finished;
   }
 
+  get currentEvent(): HorseEventType {
+    return this._eventType;
+  }
+
+  triggerEvent(type: HorseEventType): void {
+    if (this._finished || type === 'none') return;
+    this._eventType = type;
+    this.eventTimer = EVENT_DURATION[type];
+    this.eventIconText.text = EVENT_ICON[type];
+    this.eventIconText.style.fill =
+      type === 'nitro' ? COLORS.orange : type === 'reverse' ? COLORS.primary : COLORS.gold;
+    this.eventIconText.visible = true;
+  }
+
   update(delta: number): void {
     if (this._finished) return;
 
     this.elapsed += delta;
-    this.speedTimer += delta;
 
-    // Every 0.5s, apply noise to speed
-    if (this.speedTimer >= 0.5) {
-      this.speedTimer -= 0.5;
-      const noise = this.rng.range(-0.025, 0.025);
-      this.currentSpeed = Math.max(0.04, Math.min(0.175, this.baseSpeed + noise));
+    // Event countdown
+    if (this._eventType !== 'none') {
+      this.eventTimer -= delta;
+      if (this.eventTimer <= 0) {
+        this._eventType = 'none';
+        this.eventIconText.visible = false;
+      }
     }
 
-    // Advance theta (clockwise in math convention)
-    const dTheta = this.currentSpeed * delta;
-    this.theta -= dTheta;
-    this.totalAngle += dTheta;
+    // Speed noise every 0.5s (skip during wipeout)
+    if (this._eventType !== 'wipeout') {
+      this.speedTimer += delta;
+      if (this.speedTimer >= 0.5) {
+        this.speedTimer -= 0.5;
+        const noise = this.rng.range(-0.06, 0.06);
+        this.currentSpeed = Math.max(0.22, Math.min(0.75, this.baseSpeed + noise));
+      }
+    }
 
-    if (this.totalAngle >= Math.PI * 2 * OVAL_TRACK.laps) {
+    // Movement physics based on event
+    if (this._eventType !== 'wipeout') {
+      const dTheta =
+        this._eventType === 'nitro'
+          ? this.currentSpeed * delta * 3.0
+          : this.currentSpeed * delta;
+
+      if (this._eventType === 'reverse') {
+        this.theta += dTheta;
+        this.totalAngle = Math.max(0, this.totalAngle - dTheta);
+      } else {
+        this.theta -= dTheta;
+        this.totalAngle += dTheta;
+      }
+    }
+
+    if (this.totalAngle >= Math.PI * 2 * this.trackParams.laps) {
       this._finished = true;
     }
 
     this.container.x = this.x;
     this.container.y = this.y;
+    this.container.rotation = 0;
 
-    // Rotate container to face direction of motion
-    this.container.rotation = Math.atan2(
-      -this.laneRadius * Math.cos(this.theta),
-      this.laneRadius * Math.sin(this.theta) * (OVAL_TRACK.rx / OVAL_TRACK.ry),
-    );
+    // Flip horizontally based on horizontal velocity
+    const vx = this.laneRadius * Math.sin(this.theta) * this.trackParams.ratio;
+    this.bodyGfx.scale.x = vx >= 0 ? 1 : -1;
 
     this.drawHorse(this.elapsed);
   }
@@ -112,84 +172,179 @@ export class Horse {
     this.theta = Math.PI;
     this.totalAngle = 0;
     this._finished = false;
+    this._eventType = 'none';
+    this.eventTimer = 0;
+    this.eventIconText.visible = false;
     this.currentSpeed = this.baseSpeed;
     this.speedTimer = 0;
     this.elapsed = 0;
     this.container.x = this.x;
     this.container.y = this.y;
     this.container.rotation = 0;
+    this.bodyGfx.scale.x = 1;
     this.drawHorse(0);
   }
 
   private drawHorse(time: number): void {
+    if (this._eventType === 'wipeout') {
+      this.drawWipeout(time);
+      return;
+    }
+
     const g = this.bodyGfx;
     g.clear();
 
-    const legPhase = Math.sin(time * 9);
+    const PX = 3;
     const color = this.color;
-    const dark = this.darken(color, 0.4);
+    const dark = this.darken(color, 0.45);
+    const lighter = this.lighten(color, 0.25);
 
-    // Shadow beneath horse
-    g.ellipse(2, 14, 14, 4);
-    g.fill({ color: 0x000000, alpha: 0.3 });
+    // 4-frame gallop cycle — faster during nitro
+    const fps = this._eventType === 'nitro' ? 20 : 12;
+    const frame = Math.floor(time * fps) % 4;
 
-    // Body — ellipse
-    g.ellipse(0, 0, 16, 10);
-    g.fill({ color });
+    const GALLOP: [number, number, number, number, number, number, number, number][] = [
+      [PX * 2, -PX,    -PX,     PX,    -PX * 2, -PX,    PX,      PX],
+      [PX,     -PX * 2, PX,    -PX * 2, -PX,    -PX * 2, -PX,   -PX * 2],
+      [-PX,    -PX,     PX * 2, PX,     PX,     -PX,    -PX * 2, PX],
+      [PX * 3, -PX * 2, -PX * 2, -PX * 2, -PX * 3, -PX * 2, PX * 2, -PX * 2],
+    ];
 
-    // Body shading (top highlight)
-    g.ellipse(-2, -3, 10, 5);
-    g.fill({ color: 0xffffff, alpha: 0.15 });
+    const [frx, fry, flx, fly, brx, bry, blx, bly] = GALLOP[frame];
+    const bodyBob = (frame === 1 || frame === 3) ? -PX : 0;
 
-    // Neck
-    g.moveTo(12, -5);
-    g.lineTo(18, -10);
-    g.stroke({ color, width: 5 });
+    // ── Nitro trail ───────────────────────────────
+    if (this._eventType === 'nitro') {
+      const trailCount = 4;
+      for (let t = 1; t <= trailCount; t++) {
+        const trailAlpha = 0.5 - t * 0.1;
+        const tx = -t * PX * 4;
+        g.rect(tx - 6, -6 + bodyBob, PX * 8, PX * 4);
+        g.fill({ color: COLORS.orange, alpha: trailAlpha });
+      }
+    }
 
-    // Head — rounded
-    g.roundRect(14, -16, 12, 9, 3);
-    g.fill({ color });
+    // ── Shadow ────────────────────────────────────
+    g.rect(-15, 14 - bodyBob, 30, PX);
+    g.fill({ color: 0x000000, alpha: 0.25 });
 
-    // Eye
-    g.circle(22, -13, 1.5);
-    g.fill({ color: 0x000000 });
-
-    // Ear
-    g.moveTo(18, -15);
-    g.lineTo(16, -20);
-    g.lineTo(21, -17);
+    // ── Tail ──────────────────────────────────────
+    const tailWave = Math.sin(time * 8) * PX;
+    g.rect(-21, -6 + bodyBob + tailWave, PX * 2, PX * 2);
+    g.fill({ color: dark });
+    g.rect(-18, -3 + bodyBob + tailWave * 0.5, PX * 2, PX * 2);
+    g.fill({ color: dark });
+    g.rect(-18, 0 + bodyBob, PX, PX * 3);
     g.fill({ color: dark });
 
-    // Tail — flowing
-    g.moveTo(-16, -2);
-    g.quadraticCurveTo(-26, 2 + legPhase * 3, -24, 8 + legPhase * 2);
-    g.stroke({ color: dark, width: 3 });
+    // ── Body ──────────────────────────────────────
+    g.rect(-15, -9 + bodyBob, PX * 10, PX * 6);
+    g.fill({ color: this._eventType === 'nitro' ? this.lighten(color, 0.15) : color });
+    g.rect(-12, -9 + bodyBob, PX * 8, PX);
+    g.fill({ color: lighter });
 
-    // Mane
-    g.moveTo(10, -8);
-    g.quadraticCurveTo(6, -14, 3, -10);
-    g.stroke({ color: dark, width: 2.5 });
+    // ── Neck ──────────────────────────────────────
+    g.rect(12, -15 + bodyBob, PX * 3, PX * 3);
+    g.fill({ color });
 
-    // Legs
-    const lf = legPhase * 5;
-    const lb = -legPhase * 5;
+    // ── Head ──────────────────────────────────────
+    g.rect(15, -21 + bodyBob, PX * 4, PX * 3);
+    g.fill({ color });
+    g.rect(24, -18 + bodyBob, PX, PX);
+    g.fill({ color: dark });
+    g.rect(18, -21 + bodyBob, PX, PX);
+    g.fill({ color: 0x111111 });
+    g.rect(15, -24 + bodyBob, PX, PX * 2);
+    g.fill({ color: dark });
 
-    g.moveTo(8, 8);  g.lineTo(8 + lf, 20);  g.stroke({ color, width: 2.5 });
-    g.moveTo(11, 8); g.lineTo(11 - lf, 20); g.stroke({ color, width: 2.5 });
-    g.moveTo(-6, 8); g.lineTo(-6 + lb, 20); g.stroke({ color, width: 2.5 });
-    g.moveTo(-3, 8); g.lineTo(-3 - lb, 20); g.stroke({ color, width: 2.5 });
+    // ── Mane ──────────────────────────────────────
+    const maneWave = Math.sin(time * 7 + 1) * PX * 0.5;
+    g.rect(9, -18 + bodyBob + maneWave, PX, PX * 4);
+    g.fill({ color: dark });
+    g.rect(12, -18 + bodyBob, PX, PX * 2);
+    g.fill({ color: dark });
 
-    // Hooves
-    g.roundRect(8 + lf - 2, 18, 5, 3, 1);   g.fill({ color: dark });
-    g.roundRect(11 - lf - 2, 18, 5, 3, 1);  g.fill({ color: dark });
-    g.roundRect(-6 + lb - 2, 18, 5, 3, 1);  g.fill({ color: dark });
-    g.roundRect(-3 - lb - 2, 18, 5, 3, 1);  g.fill({ color: dark });
+    // ── Legs ──────────────────────────────────────
+    const legLen = PX * 5;
+    const legY = -3 + bodyBob;
+
+    g.rect(6 + frx,  legY + fry,          PX, legLen); g.fill({ color });
+    g.rect(6 + frx,  legY + fry + legLen,  PX, PX);    g.fill({ color: dark });
+    g.rect(3 + flx,  legY + fly,           PX, legLen); g.fill({ color: dark });
+    g.rect(3 + flx,  legY + fly + legLen,  PX, PX);    g.fill({ color: 0x111111 });
+    g.rect(-6 + brx, legY + bry,           PX, legLen); g.fill({ color });
+    g.rect(-6 + brx, legY + bry + legLen,  PX, PX);    g.fill({ color: dark });
+    g.rect(-9 + blx, legY + bly,           PX, legLen); g.fill({ color: dark });
+    g.rect(-9 + blx, legY + bly + legLen,  PX, PX);    g.fill({ color: 0x111111 });
+
+    // ── Jockey ────────────────────────────────────
+    const jockeyColor = this.lighten(color, 0.5);
+    const jockeyY = -12 + bodyBob;
+    g.rect(3,  jockeyY - PX * 3, PX * 4, PX * 3); g.fill({ color: jockeyColor });
+    g.rect(9,  jockeyY - PX * 5, PX * 3, PX * 2); g.fill({ color: 0xffffff });
+    g.rect(9,  jockeyY - PX * 5, PX * 3, PX);     g.fill({ color: this.darken(jockeyColor, 0.2) });
+    g.rect(12, jockeyY - PX * 2, PX * 3, PX);     g.fill({ color: jockeyColor });
+  }
+
+  private drawWipeout(time: number): void {
+    const g = this.bodyGfx;
+    g.clear();
+
+    const PX = 3;
+    const color = this.color;
+    const dark = this.darken(color, 0.45);
+
+    // Body horizontal (lying on side)
+    g.rect(-18, 0, PX * 12, PX * 4);
+    g.fill({ color });
+    g.rect(-15, 0, PX * 10, PX);
+    g.fill({ color: this.lighten(color, 0.2) });
+
+    // Head (flopped to side)
+    g.rect(12, -3, PX * 4, PX * 3);
+    g.fill({ color });
+    g.rect(21, 0, PX, PX);
+    g.fill({ color: dark });
+
+    // Eye (X shape = knocked out)
+    g.rect(15, -3, PX, PX);
+    g.fill({ color: 0x111111 });
+
+    // All 4 legs sticking upward
+    g.rect(-12, -PX * 4, PX, PX * 4); g.fill({ color });
+    g.rect(-9,  -PX * 3, PX, PX * 3); g.fill({ color: dark });
+    g.rect(-3,  -PX * 4, PX, PX * 4); g.fill({ color });
+    g.rect(0,   -PX * 3, PX, PX * 3); g.fill({ color: dark });
+
+    // Jockey tumbled off (sitting next to horse, wobbling)
+    const jockeyColor = this.lighten(color, 0.5);
+    const wobble = Math.sin(time * 6) * PX;
+    g.rect(-24, -PX * 3 + wobble, PX * 2, PX * 3); g.fill({ color: jockeyColor });
+    g.rect(-24, -PX * 5 + wobble, PX * 2, PX * 2); g.fill({ color: 0xffffff });
+
+    // Spinning stars (4 dots rotating)
+    const starAngle = time * 6;
+    const STAR_COLOR = COLORS.gold;
+    for (let i = 0; i < 4; i++) {
+      const sa = starAngle + (i * Math.PI) / 2;
+      const sx = Math.round(Math.cos(sa) * 10);
+      const sy = Math.round(Math.sin(sa) * 7) - 16;
+      g.rect(sx - 2, sy - 2, PX, PX);
+      g.fill({ color: STAR_COLOR });
+    }
   }
 
   private darken(color: number, amount: number): number {
     const r = Math.max(0, ((color >> 16) & 0xff) - Math.round(255 * amount));
     const g = Math.max(0, ((color >> 8) & 0xff) - Math.round(255 * amount));
     const b = Math.max(0, (color & 0xff) - Math.round(255 * amount));
+    return (r << 16) | (g << 8) | b;
+  }
+
+  private lighten(color: number, amount: number): number {
+    const r = Math.min(255, ((color >> 16) & 0xff) + Math.round(255 * amount));
+    const g = Math.min(255, ((color >> 8) & 0xff) + Math.round(255 * amount));
+    const b = Math.min(255, (color & 0xff) + Math.round(255 * amount));
     return (r << 16) | (g << 8) | b;
   }
 }

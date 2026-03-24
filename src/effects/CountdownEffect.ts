@@ -1,24 +1,34 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { gsap } from 'gsap';
 import { COLORS, DESIGN_WIDTH, DESIGN_HEIGHT, FONT_DISPLAY } from '@utils/constants';
+import { fullScreenRect, type ScaleInfo } from '@utils/responsive';
 
-const NUMBER_COLORS = [0x00ccff, 0xffdd00, 0xff4444];
+const NUMBER_COLORS = [COLORS.blue, COLORS.gold, COLORS.primary];
 
 export class CountdownEffect {
   private container: Container;
   private parent: Container;
   private timeline: gsap.core.Timeline | null = null;
+  private scaleInfo: ScaleInfo | null = null;
 
-  constructor(parent: Container) {
+  constructor(parent: Container, scaleInfo?: ScaleInfo) {
     this.parent = parent;
+    this.scaleInfo = scaleInfo ?? null;
     this.container = new Container();
     this.parent.addChild(this.container);
   }
 
-  play(onComplete: () => void): void {
-    // Dark overlay
+  play(onComplete: () => void, centerX?: number, centerY?: number): void {
+    const cx = centerX ?? DESIGN_WIDTH / 2;
+    const cy = centerY ?? DESIGN_HEIGHT / 2;
+    // Dark overlay — covers entire canvas including letterbox
     const overlay = new Graphics();
-    overlay.rect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+    if (this.scaleInfo) {
+      const r = fullScreenRect(this.scaleInfo);
+      overlay.rect(r.x, r.y, r.w, r.h);
+    } else {
+      overlay.rect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+    }
     overlay.fill({ color: 0x000000, alpha: 0.55 });
     overlay.alpha = 0;
     this.container.addChild(overlay);
@@ -36,14 +46,15 @@ export class CountdownEffect {
 
     numbers.forEach((num, idx) => {
       const accentColor = NUMBER_COLORS[idx];
+      const boxSize = 120;
 
-      // Circular backdrop
+      // Dot-style: square backdrop instead of circle
       const ring = new Graphics();
-      ring.circle(0, 0, 70);
+      ring.rect(-boxSize / 2, -boxSize / 2, boxSize, boxSize);
       ring.fill({ color: accentColor, alpha: 0.12 });
-      ring.circle(0, 0, 70);
-      ring.stroke({ color: accentColor, width: 2.5, alpha: 0.7 });
-      ring.position.set(DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2);
+      ring.rect(-boxSize / 2, -boxSize / 2, boxSize, boxSize);
+      ring.stroke({ color: accentColor, width: 2, alpha: 0.7 });
+      ring.position.set(cx, cy);
       ring.alpha = 0;
       ring.scale.set(2);
       this.container.addChild(ring);
@@ -55,11 +66,11 @@ export class CountdownEffect {
           fontFamily: FONT_DISPLAY,
           fontSize: 100,
           fill: accentColor,
-          dropShadow: { color: accentColor, blur: 24, distance: 0, angle: 0, alpha: 0.8 },
+          dropShadow: { color: accentColor, blur: 0, distance: 2, angle: Math.PI / 2, alpha: 0.8 },
         },
       });
       text.anchor.set(0.5);
-      text.position.set(DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2);
+      text.position.set(cx, cy);
       text.alpha = 0;
       text.scale.set(1.8);
       this.container.addChild(text);
@@ -80,13 +91,14 @@ export class CountdownEffect {
         }, '+=0.2');
     });
 
-    // GO text
+    // GO text — dot-style square ring
+    const goBoxSize = 160;
     const goRing = new Graphics();
-    goRing.circle(0, 0, 90);
+    goRing.rect(-goBoxSize / 2, -goBoxSize / 2, goBoxSize, goBoxSize);
     goRing.fill({ color: COLORS.gold, alpha: 0.15 });
-    goRing.circle(0, 0, 90);
-    goRing.stroke({ color: COLORS.gold, width: 3, alpha: 0.8 });
-    goRing.position.set(DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2);
+    goRing.rect(-goBoxSize / 2, -goBoxSize / 2, goBoxSize, goBoxSize);
+    goRing.stroke({ color: COLORS.gold, width: 2, alpha: 0.8 });
+    goRing.position.set(cx, cy);
     goRing.alpha = 0;
     this.container.addChild(goRing);
 
@@ -96,11 +108,11 @@ export class CountdownEffect {
         fontFamily: FONT_DISPLAY,
         fontSize: 88,
         fill: COLORS.gold,
-        dropShadow: { color: COLORS.gold, blur: 28, distance: 0, angle: 0, alpha: 0.9 },
+        dropShadow: { color: COLORS.gold, blur: 0, distance: 2, angle: Math.PI / 2, alpha: 0.9 },
       },
     });
     goText.anchor.set(0.5);
-    goText.position.set(DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2);
+    goText.position.set(cx, cy);
     goText.alpha = 0;
     goText.scale.set(0.5);
     this.container.addChild(goText);
