@@ -8,9 +8,12 @@ import { PachinkoScene } from '@scenes/games/PachinkoScene';
 import type { GameConfig, GameResult, GameMode, Player } from './types';
 import type { BaseScene } from '@core/BaseScene';
 
+import type { ScaleInfo } from '@utils/responsive';
+
 type GameScene = BaseScene & {
   setConfig: (c: GameConfig) => void;
   setEndCallback: (cb: (r: GameResult) => void) => void;
+  setScaleInfo?: (s: ScaleInfo) => void;
 };
 
 async function main() {
@@ -49,6 +52,7 @@ async function main() {
       showResult(result);
     });
     scene.setSound(app.sound);
+    scene.setScaleInfo?.(app.scaleInfo);
     await app.scenes.transition(scene);
   }
 

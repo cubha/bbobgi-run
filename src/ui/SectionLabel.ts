@@ -30,7 +30,7 @@ export class SectionLabel {
         fontSize: 12,
         fontWeight: '700',
         fill: COLORS.textDim,
-        letterSpacing: 2,
+        letterSpacing: 1,
       },
     });
     label.x = 24;

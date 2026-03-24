@@ -17,6 +17,7 @@ export interface GameConfig {
   pickMode: PickMode;
   seed?: number;
   ballCount?: number;
+  lapCount?: number;
 }
 
 /** Final ranking result */
@@ -32,6 +33,18 @@ export interface GameResult {
   rankings: RankingEntry[];
   seed: number;
   pickMode: PickMode;
+}
+
+// ─── 경마 트랙 파라미터 ───
+
+export interface TrackParams {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  laneWidth: number;
+  laps: number;
+  ratio: number;
 }
 
 // ─── 기록 (Record) ───

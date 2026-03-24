@@ -72,7 +72,7 @@ export class StatsPanel {
 
         // Row background
         const rowBg = new Graphics();
-        rowBg.roundRect(14, currentY, DESIGN_WIDTH - 28, rowH, 8);
+        rowBg.rect(14, currentY, DESIGN_WIDTH - 28, rowH);
         rowBg.fill({ color: COLORS.accent, alpha: 0.8 });
         this.container.addChild(rowBg);
 

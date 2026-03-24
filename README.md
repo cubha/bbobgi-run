@@ -160,8 +160,8 @@ src/
 - [x] RecordManager — Dexie.js IndexedDB 게임 기록 자동 저장 + 전적 통계
 - [x] StatsPanel — ResultScene 전적 통계 UI
 - [x] 베팅 시스템 제거 — BettingManager / BettingPanel / BettingResultPanel 삭제
-- [ ] 경마: 돔/오벌 트랙 레이아웃 + 빠른 템포 개선
-- [ ] 구슬 레이스: 첫 번째 경로 멈춤 버그 수정
+- [x] 경마: 오벌 트랙 재설계 (흙/잔디 텍스처, 출발 게이트, 레인 번호) + wipeout/nitro/reverse 랜덤 이벤트 시스템 + 진행도 기반 페이즈 전환 + 순위 패널 UI
+- [x] 구슬 레이스: 첫 번째 경로 멈춤 버그 수정
 - [ ] 사다리타기: 복잡한 구조 + 카오스 이벤트 시스템
 - [ ] 파친코: 함정/변수 추가 + 단일 골 구조 + 공 개수 설정
 - [ ] NetworkManager — Supabase Realtime 호스트-게스트 실시간 통신
@@ -221,6 +221,7 @@ bash verify.sh
 
 | 날짜 | 분류 | 증상 | 원인 | 해결 |
 |---|---|---|---|---|
+| 2026-03-24 | 버그 수정 | 구슬 레이스 첫 경로에서 구슬 전체 막힘 | 경사로 각도 부호 오류 — `angle = TRACK.rampAngle * direction`으로 구슬이 벽과 경사로 사이 10px 틈으로 몰림 (구슬 지름 16px) | `angle = -TRACK.rampAngle * direction`으로 수정, 40px 출구 방향으로 흘러내리도록 변경 |
 | 2026-03-22 | 제거 | 베팅 시스템 오버엔지니어링 | 게임 목적(관람형 뽑기)과 불일치, 코드 복잡도 증가 | BettingManager / BettingPanel / BettingResultPanel 전체 삭제 |
 
 > 새 이슈 발생 시 위 테이블에 행을 추가한다.

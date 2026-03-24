@@ -13,7 +13,7 @@ export class DotGridBackground {
 
   constructor(options: DotGridBackgroundOptions = {}) {
     const {
-      dotColor = 0x3344aa,
+      dotColor = COLORS.blue,
       dotAlpha = 0.25,
       accentColor = COLORS.primary,
       showBottomBar = false,
@@ -31,7 +31,7 @@ export class DotGridBackground {
     const dots = new Graphics();
     for (let y = 16; y < DESIGN_HEIGHT; y += 28) {
       for (let x = 16; x < DESIGN_WIDTH; x += 28) {
-        dots.circle(x, y, 1);
+        dots.rect(x - 1, y - 1, 2, 2);
         dots.fill({ color: dotColor, alpha: dotAlpha });
       }
     }

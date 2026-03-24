@@ -145,7 +145,7 @@ export class ResultScene extends BaseScene {
         fontFamily: FONT_DISPLAY,
         fontSize: 42,
         fill: COLORS.gold,
-        dropShadow: { color: COLORS.gold, blur: 20, distance: 0, angle: 0, alpha: 0.7 },
+        dropShadow: { color: COLORS.gold, blur: 0, distance: 2, angle: Math.PI / 2, alpha: 0.7 },
       },
     });
     nameText.anchor.set(0.5);
@@ -221,7 +221,7 @@ export class ResultScene extends BaseScene {
         fontFamily: FONT_DISPLAY,
         fontSize: 42,
         fill: COLORS.primary,
-        dropShadow: { color: COLORS.primary, blur: 20, distance: 0, angle: 0, alpha: 0.7 },
+        dropShadow: { color: COLORS.primary, blur: 0, distance: 2, angle: Math.PI / 2, alpha: 0.7 },
       },
     });
     nameText.anchor.set(0.5);
@@ -294,13 +294,13 @@ export class ResultScene extends BaseScene {
 
       // Row background
       const rowBg = new Graphics();
-      rowBg.roundRect(14, 0, DESIGN_WIDTH - 28, 38, 10);
+      rowBg.rect(14, 0, DESIGN_WIDTH - 28, 38);
       rowBg.fill({ color: COLORS.accent, alpha: 0.85 });
       rowContainer.addChild(rowBg);
 
       // Left color accent strip
       const strip = new Graphics();
-      strip.roundRect(14, 0, 4, 38, 2);
+      strip.rect(14, 0, 4, 38);
       strip.fill({ color: playerColor, alpha: 0.8 });
       rowContainer.addChild(strip);
 
@@ -380,7 +380,6 @@ export class ResultScene extends BaseScene {
       width: 366,
       height: 54,
       color: COLORS.secondary,
-      colorEnd: 0x1a5090,
       onClick: () => this.onReplay?.(),
     });
     btn.container.x = 12;
@@ -409,7 +408,6 @@ export class ResultScene extends BaseScene {
       width: 366,
       height: 46,
       color: 0x1a3040,
-      colorEnd: 0x254a6a,
       onClick: () => this.shareResult(),
     });
     btn.container.x = 12;

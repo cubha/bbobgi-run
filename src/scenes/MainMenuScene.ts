@@ -20,6 +20,7 @@ export class MainMenuScene extends BaseScene {
   private selectedPickMode: PickMode = 'first';
   private selectedGameMode: GameMode = 'horse';
   private selectedBallCount: number = 1;
+  private selectedLapCount: number = 2;
   private players: Player[] = [];
   private onStart: ((config: GameConfig) => void) | null = null;
 
@@ -27,6 +28,8 @@ export class MainMenuScene extends BaseScene {
   private modeCards: ModeCard[] = [];
   private ballCountContainer: Container | null = null;
   private ballCountBtns: Graphics[] = [];
+  private lapCountContainer: Container | null = null;
+  private lapDropdown: HTMLSelectElement | null = null;
   private nameInput: NameInput | null = null;
   private startBtn: Button | null = null;
   private initialPlayers: Player[] = [];
@@ -50,6 +53,7 @@ export class MainMenuScene extends BaseScene {
     this.buildPickModeSection();
     this.buildGameModeSection();
     this.buildBallCountSection();
+    this.buildLapCountSection();
     this.buildNameInputSection();
     this.buildStartButton();
     this.updateStartButton();
@@ -64,6 +68,8 @@ export class MainMenuScene extends BaseScene {
     gsap.killTweensOf(this.container);
     this.nameInput?.destroy();
     this.nameInput = null;
+    this.lapDropdown?.remove();
+    this.lapDropdown = null;
     super.destroy();
   }
 
@@ -91,9 +97,9 @@ export class MainMenuScene extends BaseScene {
         fill: COLORS.text,
         dropShadow: {
           color: COLORS.primary,
-          blur: 16,
-          distance: 0,
-          angle: 0,
+          blur: 0,
+          distance: 2,
+          angle: Math.PI / 2,
           alpha: 0.6,
         },
       },
@@ -191,6 +197,12 @@ export class MainMenuScene extends BaseScene {
     if (this.ballCountContainer) {
       this.ballCountContainer.visible = mode === 'pachinko';
     }
+    if (this.lapCountContainer) {
+      this.lapCountContainer.visible = mode === 'horse';
+    }
+    if (this.lapDropdown) {
+      this.lapDropdown.style.display = mode === 'horse' ? '' : 'none';
+    }
   }
 
   // ─── Ball Count Section ───────────────────────
@@ -220,14 +232,14 @@ export class MainMenuScene extends BaseScene {
 
   private drawBallCountBtn(bg: Graphics, n: number, selected: boolean): void {
     bg.clear();
-    bg.roundRect(0, 0, 100, 36, 10);
-    bg.fill({ color: selected ? COLORS.primary : 0x223344, alpha: selected ? 1 : 0.7 });
-    bg.roundRect(0, 0, 100, 36, 10);
-    bg.stroke({ color: selected ? 0xff6080 : 0x445566, width: 1.5, alpha: 0.8 });
+    bg.rect(0, 0, 100, 36);
+    bg.fill({ color: selected ? COLORS.primary : COLORS.secondary, alpha: selected ? 1 : 0.7 });
+    bg.rect(0, 0, 100, 36);
+    bg.stroke({ color: selected ? COLORS.pink : COLORS.darkGray, width: 2, alpha: 0.8 });
 
     const label = new Text({
       text: `${n}개`,
-      style: { fontFamily: FONT_DISPLAY, fontSize: 16, fill: 0xffffff, fontWeight: 'bold' },
+      style: { fontFamily: FONT_DISPLAY, fontSize: 16, fill: COLORS.text, fontWeight: 'bold' },
     });
     label.anchor.set(0.5);
     label.x = 50;
@@ -242,6 +254,62 @@ export class MainMenuScene extends BaseScene {
       while (bg.children.length > 0) bg.removeChildAt(0);
       this.drawBallCountBtn(bg, i + 1, i + 1 === n);
     });
+  }
+
+  // ─── Lap Count Section (Horse Racing) ─────────
+
+  private buildLapCountSection(): void {
+    const ctr = new Container();
+    ctr.visible = this.selectedGameMode === 'horse';
+    this.container.addChild(ctr);
+    this.lapCountContainer = ctr;
+
+    ctr.addChild(new SectionLabel({ text: '바퀴 수', y: 584 }).container);
+
+    const { scale, offsetX, offsetY } = this.app.scaleInfo;
+    const designX = 16;
+    const designY = 604;
+    const designW = 358;
+    const designH = 38;
+
+    const select = document.createElement('select');
+    select.style.cssText = [
+      `position: fixed`,
+      `left: ${Math.round(designX * scale + offsetX)}px`,
+      `top: ${Math.round(designY * scale + offsetY)}px`,
+      `width: ${Math.round(designW * scale)}px`,
+      `height: ${Math.round(designH * scale)}px`,
+      `font-size: ${Math.round(16 * scale)}px`,
+      `font-family: monospace`,
+      `background: #1a1a2e`,
+      `color: #ffffff`,
+      `border: 2px solid #ff2d78`,
+      `border-radius: ${Math.round(6 * scale)}px`,
+      `padding: 0 ${Math.round(8 * scale)}px`,
+      `cursor: pointer`,
+      `outline: none`,
+      `appearance: none`,
+      `-webkit-appearance: none`,
+      `z-index: 10`,
+    ].join(';');
+
+    for (let n = 1; n <= 10; n++) {
+      const opt = document.createElement('option');
+      opt.value = `${n}`;
+      opt.text = `${n}바퀴`;
+      if (n === this.selectedLapCount) opt.selected = true;
+      select.appendChild(opt);
+    }
+
+    select.addEventListener('change', () => {
+      this.selectedLapCount = parseInt(select.value, 10);
+    });
+
+    const gameContainer = document.getElementById('game-container');
+    (gameContainer ?? document.body).appendChild(select);
+    this.lapDropdown = select;
+
+    if (this.selectedGameMode !== 'horse') select.style.display = 'none';
   }
 
   // ─── Name Input Section ───────────────────────
@@ -275,7 +343,6 @@ export class MainMenuScene extends BaseScene {
       width: 366,
       height: 54,
       color: COLORS.primary,
-      colorEnd: 0xff6080,
       onClick: () => this.handleStart(),
     });
     btn.container.x = 12;
@@ -304,6 +371,8 @@ export class MainMenuScene extends BaseScene {
       players: this.players,
       pickMode: this.selectedPickMode,
       ballCount: this.selectedBallCount,
+      lapCount: this.selectedLapCount,
+      seed: Date.now(),
     });
   }
 

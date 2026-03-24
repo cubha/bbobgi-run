@@ -2,7 +2,14 @@ import { Container, Graphics } from 'pixi.js';
 import { gsap } from 'gsap';
 import { COLORS, DESIGN_WIDTH, DESIGN_HEIGHT } from '@utils/constants';
 
-const CONFETTI_COLORS = [COLORS.gold, COLORS.primary, 0x3498db, 0x2ecc71, 0x9b59b6, 0xf39c12];
+const CONFETTI_COLORS = [
+  COLORS.gold,
+  COLORS.primary,
+  COLORS.blue,
+  COLORS.brightGreen,
+  COLORS.pink,
+  COLORS.orange,
+];
 
 export class ConfettiEffect {
   private parent: Container;
@@ -15,11 +22,12 @@ export class ConfettiEffect {
   play(count: number = 45): void {
     for (let i = 0; i < count; i++) {
       const particle = new Graphics();
-      const isRect = i % 3 !== 2;
-      if (isRect) {
-        particle.rect(-5, -3, 10, 6);
+      // Dot-style: all rect pixels (4x4 or 8x4)
+      const isWide = i % 3 !== 2;
+      if (isWide) {
+        particle.rect(-4, -2, 8, 4);
       } else {
-        particle.circle(0, 0, 4);
+        particle.rect(-3, -3, 6, 6);
       }
       particle.fill({ color: CONFETTI_COLORS[i % CONFETTI_COLORS.length] });
       particle.rotation = Math.random() * Math.PI * 2;

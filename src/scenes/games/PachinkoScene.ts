@@ -18,6 +18,7 @@ import {
   FONT_DISPLAY,
   FONT_BODY,
 } from '@utils/constants';
+import type { ScaleInfo } from '@utils/responsive';
 
 type GamePhase = 'countdown' | 'dropping' | 'chaos' | 'tension' | 'slowmo' | 'done';
 
@@ -84,6 +85,7 @@ interface Gate {
 export class PachinkoScene extends BaseScene {
   protected config: GameConfig | null = null;
   protected endCallback: ((result: GameResult) => void) | null = null;
+  private _scaleInfo: ScaleInfo | null = null;
 
   private physics: PhysicsWorld | null = null;
   private balls: PachinkoBall[] = [];
@@ -123,6 +125,10 @@ export class PachinkoScene extends BaseScene {
 
   setEndCallback(cb: (result: GameResult) => void): void {
     this.endCallback = cb;
+  }
+
+  setScaleInfo(s: ScaleInfo): void {
+    this._scaleInfo = s;
   }
 
   async init(): Promise<void> {
@@ -527,15 +533,15 @@ export class PachinkoScene extends BaseScene {
         const circle = new Graphics();
         circle.circle(0, 0, BOARD.ballRadius);
         circle.fill({ color });
-        circle.circle(-2, -2, BOARD.ballRadius * 0.4);
-        circle.fill({ color: 0xffffff, alpha: 0.3 });
+        circle.rect(-BOARD.ballRadius + 2, -BOARD.ballRadius + 2, 3, 3);
+        circle.fill({ color: COLORS.text, alpha: 0.6 });
         gfx.addChild(circle);
 
         // Show name only on first ball
         if (bi === 0) {
           const nameText = new Text({
             text: player.name.slice(0, 2),
-            style: { fontFamily: FONT_BODY, fontSize: 7, fontWeight: '700', fill: 0xffffff },
+            style: { fontFamily: FONT_BODY, fontSize: 7, fontWeight: '700', fill: COLORS.text },
           });
           nameText.anchor.set(0.5, 0.5);
           gfx.addChild(nameText);
@@ -666,9 +672,9 @@ export class PachinkoScene extends BaseScene {
       // Redraw bumper white
       bumper.gfx.clear();
       bumper.gfx.circle(bumper.body.position.x, bumper.body.position.y, BUMPER_RADIUS);
-      bumper.gfx.fill({ color: 0xffffff, alpha: 0.95 });
+      bumper.gfx.fill({ color: COLORS.text, alpha: 0.95 });
       bumper.gfx.circle(bumper.body.position.x, bumper.body.position.y, BUMPER_RADIUS * 0.55);
-      bumper.gfx.fill({ color: 0xff4444, alpha: 0.8 });
+      bumper.gfx.fill({ color: COLORS.primary, alpha: 0.8 });
     }
   }
 
@@ -682,8 +688,8 @@ export class PachinkoScene extends BaseScene {
 
     // Timer bar background
     const timerBgBar = new Graphics();
-    timerBgBar.roundRect(14, 10, DESIGN_WIDTH - 28, 7, 3);
-    timerBgBar.fill({ color: 0x222233, alpha: 0.9 });
+    timerBgBar.rect(14, 10, DESIGN_WIDTH - 28, 7);
+    timerBgBar.fill({ color: COLORS.secondary, alpha: 0.9 });
     this.uiContainer.addChild(timerBgBar);
 
     this.timerBar = new Graphics();
@@ -738,7 +744,7 @@ export class PachinkoScene extends BaseScene {
     this.timerBar.clear();
     if (progress <= 0) return;
     const color = progress > 0.35 ? COLORS.gold : COLORS.primary;
-    this.timerBar.roundRect(14, 10, barWidth * progress, 7, 3);
+    this.timerBar.rect(14, 10, barWidth * progress, 7);
     this.timerBar.fill({ color, alpha: 0.9 });
   }
 
@@ -755,7 +761,7 @@ export class PachinkoScene extends BaseScene {
   // ─── Phase Handlers ───────────────────────────
 
   private startCountdown(): void {
-    this.countdown = new CountdownEffect(this.container);
+    this.countdown = new CountdownEffect(this.container, this._scaleInfo ?? undefined);
     this.countdown.play(() => {
       this.phase = 'dropping';
       this.countdown = null;
@@ -788,7 +794,7 @@ export class PachinkoScene extends BaseScene {
     this.phase = 'slowmo';
     this.setPhaseLabel('🎬 슬로우모션');
     this.sound?.play('slowmo');
-    this.slowMo = new SlowMotionEffect(this.container);
+    this.slowMo = new SlowMotionEffect(this.container, this._scaleInfo ?? undefined);
     this.slowMo.activate(0.4);
     this.shaker.shake(this.container, 7, 10);
   }

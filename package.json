@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.58.2",
     "@types/howler": "^2.2.12",
     "@types/matter-js": "^0.20.2",
     "eslint": "^10.0.3",
@@ -20,6 +21,7 @@
   },
   "dependencies": {
     "dexie": "^4.3.0",
+    "galmuri": "^2.40.3",
     "gsap": "^3.14.2",
     "howler": "^2.2.4",
     "matter-js": "^0.20.0",

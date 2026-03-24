@@ -20,6 +20,7 @@ import {
   SLOWMO_RATE,
   FONT_DISPLAY,
 } from '@utils/constants';
+import type { ScaleInfo } from '@utils/responsive';
 
 type RacePhase = 'countdown' | 'racing' | 'chaos' | 'tension' | 'slowmo' | 'done';
 
@@ -54,6 +55,7 @@ const TRACK = {
 export class MarbleRaceScene extends BaseScene {
   protected config: GameConfig | null = null;
   protected endCallback: ((result: GameResult) => void) | null = null;
+  private _scaleInfo: ScaleInfo | null = null;
 
   private physics: PhysicsWorld | null = null;
   private marbles: Marble[] = [];
@@ -84,6 +86,10 @@ export class MarbleRaceScene extends BaseScene {
 
   setEndCallback(cb: (result: GameResult) => void): void {
     this.endCallback = cb;
+  }
+
+  setScaleInfo(s: ScaleInfo): void {
+    this._scaleInfo = s;
   }
 
   async init(): Promise<void> {
@@ -208,7 +214,7 @@ export class MarbleRaceScene extends BaseScene {
       const direction = i % 2 === 0 ? 1 : -1;
       const rampX = cx + direction * 15;
       const rampY = TRACK.startY + 60 + i * TRACK.rampSpacing;
-      const angle = TRACK.rampAngle * direction;
+      const angle = -TRACK.rampAngle * direction;
 
       const ramp = PhysicsWorld.createWall(rampX, rampY, TRACK.rampWidth, TRACK.rampThick, {
         angle,
@@ -284,7 +290,7 @@ export class MarbleRaceScene extends BaseScene {
         const isWhite = (Math.floor((x - TRACK.leftX) / sqSize) + row) % 2 === 0;
         const sq = new Graphics();
         sq.rect(x, y - sqSize + row * sqSize, sqSize, sqSize);
-        sq.fill({ color: isWhite ? 0xffffff : 0x111111, alpha: isWhite ? 0.9 : 0.6 });
+        sq.fill({ color: isWhite ? COLORS.text : 0x000000, alpha: isWhite ? 0.9 : 0.6 });
         this.trackContainer.addChild(sq);
       }
     }
@@ -335,8 +341,8 @@ export class MarbleRaceScene extends BaseScene {
 
     // Timer bar background
     const timerBgBar = new Graphics();
-    timerBgBar.roundRect(14, 10, DESIGN_WIDTH - 28, 7, 3);
-    timerBgBar.fill({ color: 0x222233, alpha: 0.9 });
+    timerBgBar.rect(14, 10, DESIGN_WIDTH - 28, 7);
+    timerBgBar.fill({ color: COLORS.secondary, alpha: 0.9 });
     this.uiContainer.addChild(timerBgBar);
 
     // Timer bar fill
@@ -404,7 +410,7 @@ export class MarbleRaceScene extends BaseScene {
     this.timerBar.clear();
     if (progress <= 0) return;
     const color = progress > 0.35 ? COLORS.gold : COLORS.primary;
-    this.timerBar.roundRect(14, 10, barWidth * progress, 7, 3);
+    this.timerBar.rect(14, 10, barWidth * progress, 7);
     this.timerBar.fill({ color, alpha: 0.9 });
   }
 
@@ -415,7 +421,7 @@ export class MarbleRaceScene extends BaseScene {
   // ─── Phase Handlers ───────────────────────────
 
   private startCountdown(): void {
-    this.countdown = new CountdownEffect(this.container);
+    this.countdown = new CountdownEffect(this.container, this._scaleInfo ?? undefined);
     this.countdown.play(() => {
       this.phase = 'racing';
       this.countdown = null;
@@ -486,7 +492,7 @@ export class MarbleRaceScene extends BaseScene {
     this.phase = 'slowmo';
     this.setPhaseLabel('🎬 슬로우모션');
     this.sound?.play('slowmo');
-    this.slowMo = new SlowMotionEffect(this.container);
+    this.slowMo = new SlowMotionEffect(this.container, this._scaleInfo ?? undefined);
     this.slowMo.activate(0.4);
     this.shaker.shake(this.container, 7, 10);
   }

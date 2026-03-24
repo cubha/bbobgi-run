@@ -8,6 +8,17 @@ export interface ScaleInfo {
   height: number;
 }
 
+/** Returns rect params (x, y, w, h) in design coords that cover the entire canvas including letterbox */
+export function fullScreenRect(info: ScaleInfo): { x: number; y: number; w: number; h: number } {
+  const { scale, offsetX, offsetY, width, height } = info;
+  return {
+    x: -offsetX / scale,
+    y: -offsetY / scale,
+    w: width / scale,
+    h: height / scale,
+  };
+}
+
 /**
  * Calculates scale to fit design resolution into the actual screen,
  * maintaining aspect ratio with letterboxing.
