@@ -160,7 +160,7 @@ src/
 - [x] RecordManager — Dexie.js IndexedDB 게임 기록 자동 저장 + 전적 통계
 - [x] StatsPanel — ResultScene 전적 통계 UI
 - [x] 베팅 시스템 제거 — BettingManager / BettingPanel / BettingResultPanel 삭제
-- [ ] 경마: 돔/오벌 트랙 레이아웃 + 빠른 템포 개선
+- [x] 경마: 오벌 트랙 재설계 (흙/잔디 텍스처, 출발 게이트, 레인 번호) + wipeout/nitro/reverse 랜덤 이벤트 시스템 + 진행도 기반 페이즈 전환 + 순위 패널 UI
 - [x] 구슬 레이스: 첫 번째 경로 멈춤 버그 수정
 - [ ] 사다리타기: 복잡한 구조 + 카오스 이벤트 시스템
 - [ ] 파친코: 함정/변수 추가 + 단일 골 구조 + 공 개수 설정
