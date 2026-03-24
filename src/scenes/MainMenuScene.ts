@@ -33,6 +33,7 @@ export class MainMenuScene extends BaseScene {
   private nameInput: NameInput | null = null;
   private startBtn: Button | null = null;
   private initialPlayers: Player[] = [];
+  private initialConfig: GameConfig | null = null;
 
   constructor(app: GameApplication) {
     super();
@@ -47,7 +48,17 @@ export class MainMenuScene extends BaseScene {
     this.initialPlayers = players;
   }
 
+  setInitialConfig(config: GameConfig): void {
+    this.initialConfig = config;
+  }
+
   async init(): Promise<void> {
+    if (this.initialConfig) {
+      this.selectedPickMode = this.initialConfig.pickMode;
+      this.selectedGameMode = this.initialConfig.mode;
+      if (this.initialConfig.ballCount != null) this.selectedBallCount = this.initialConfig.ballCount;
+      if (this.initialConfig.lapCount != null) this.selectedLapCount = this.initialConfig.lapCount;
+    }
     this.buildBackground();
     this.buildTitle();
     this.buildPickModeSection();

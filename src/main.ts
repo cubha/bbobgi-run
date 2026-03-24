@@ -5,7 +5,7 @@ import { HorseRaceScene } from '@scenes/games/HorseRaceScene';
 import { MarbleRaceScene } from '@scenes/games/MarbleRaceScene';
 import { LadderScene } from '@scenes/games/LadderScene';
 import { PachinkoScene } from '@scenes/games/PachinkoScene';
-import type { GameConfig, GameResult, GameMode, Player } from './types';
+import type { GameConfig, GameResult, GameMode } from './types';
 import type { BaseScene } from '@core/BaseScene';
 
 import type { ScaleInfo } from '@utils/responsive';
@@ -22,6 +22,9 @@ async function main() {
 
   const app = await GameApplication.create(container);
 
+  /** Last used config — restored when returning to main menu */
+  let lastConfig: GameConfig | null = null;
+
   /** Create the appropriate game scene based on mode */
   function createGameScene(mode: GameMode): GameScene {
     switch (mode) {
@@ -32,11 +35,12 @@ async function main() {
     }
   }
 
-  /** Navigate to main menu, optionally preserving players from a previous game */
-  async function showMenu(prevPlayers?: Player[]) {
+  /** Navigate to main menu, optionally restoring previous config + players */
+  async function showMenu(prevConfig?: GameConfig) {
     const menu = new MainMenuScene(app);
-    if (prevPlayers && prevPlayers.length > 0) {
-      menu.setInitialPlayers(prevPlayers);
+    if (prevConfig) {
+      menu.setInitialPlayers(prevConfig.players);
+      menu.setInitialConfig(prevConfig);
     }
     menu.setStartCallback((config: GameConfig) => {
       startGame(config);
@@ -46,6 +50,7 @@ async function main() {
 
   /** Start a game with given config */
   async function startGame(config: GameConfig) {
+    lastConfig = config;
     const scene = createGameScene(config.mode);
     scene.setConfig(config);
     scene.setEndCallback((result: GameResult) => {
@@ -64,7 +69,9 @@ async function main() {
     scene.setResult(result);
     scene.setRecord(app.record);
     scene.setReplayCallback(() => {
-      showMenu(result.rankings.map((r) => r.player));
+      const prevPlayers = result.rankings.map((r) => r.player);
+      const prevConfig = lastConfig ? { ...lastConfig, players: prevPlayers } : undefined;
+      showMenu(prevConfig);
     });
     scene.setSound(app.sound);
     await app.scenes.transition(scene);

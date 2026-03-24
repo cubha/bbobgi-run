@@ -48,6 +48,7 @@ export class HorseRaceScene extends BaseScene {
   private phaseLabel: Text | null = null;
   private chaosApplied = false;
   private slowmoTriggered = false;
+  private lastPickSlowmoTimer = -1;
   private prevRankIds: number[] = [];
 
   // Rank panel
@@ -114,10 +115,22 @@ export class HorseRaceScene extends BaseScene {
 
     // Progress-based phase transitions
     if (this.phase !== 'slowmo' && !this.slowmoTriggered) {
-      const relevantProgress = pickMode === 'first' ? leaderProgress : trailerProgress;
-      if (relevantProgress >= 0.99) {
+      const shouldSlowmo = pickMode === 'first'
+        ? leaderProgress >= 0.99
+        : this.finishOrder.length >= this.horses.length - 1;
+      if (shouldSlowmo) {
         this.slowmoTriggered = true;
         this.enterSlowmo();
+        if (pickMode === 'last') this.lastPickSlowmoTimer = 2.5;
+      }
+    }
+
+    // 꼴등뽑기: slowmo 연출 후 타이머 만료 시 종료
+    if (this.lastPickSlowmoTimer > 0) {
+      this.lastPickSlowmoTimer -= dt;
+      if (this.lastPickSlowmoTimer <= 0) {
+        this.endRace();
+        return;
       }
     }
     if (this.phase === 'chaos' && leaderProgress >= 0.75) {
@@ -151,10 +164,7 @@ export class HorseRaceScene extends BaseScene {
       this.endRace();
       return;
     }
-    if (pickMode === 'last' && this.finishOrder.length === this.horses.length) {
-      this.endRace();
-      return;
-    }
+    // 꼴등뽑기 종료는 위 lastPickSlowmoTimer 타이머로 처리
 
     // Progress bar
     const barProgress = pickMode === 'first' ? leaderProgress : trailerProgress;
