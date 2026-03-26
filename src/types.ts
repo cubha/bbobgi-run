@@ -18,6 +18,7 @@ export interface GameConfig {
   seed?: number;
   ballCount?: number;
   lapCount?: number;
+  marbleCount?: number;  // 구슬 레이스 구슬 수 (기본 1)
 }
 
 /** Final ranking result */

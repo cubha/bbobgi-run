@@ -17,7 +17,6 @@ import {
   TENSION_SEC,
   SLOWMO_SEC,
   GAME_DURATION_SEC,
-  SLOWMO_RATE,
   FONT_DISPLAY,
 } from '@utils/constants';
 import type { ScaleInfo } from '@utils/responsive';
@@ -29,7 +28,7 @@ type RacePhase = 'countdown' | 'racing' | 'chaos' | 'tension' | 'slowmo' | 'done
  *  Wall guides: 양쪽 벽 내향 가이드 레일 (Zone B~E, 120px 간격)
  *  Zone A [y=100~520]:   출발 산개  — 4개 완만 와이드 램프 (260px)
  *  Zone B [y=520~800]:   첫 번째 압축 — 병목1 (passWidth=80)
- *  Zone C [y=800~1300]:  핀볼 카오스 — 미디엄 램프 3개 (250px) + 8×5 대형 핀존
+ *  Zone C [y=800~1300]:  핀볼 카오스 — 미디엄 램프 3개 (250px) + 6×5 핀존
  *  Zone D [y=1300~1800]: 클라이맥스  — 스팁 램프 3개 (245px) + 좁은 병목2 + 계단식 드롭
  *  Zone E [y=1800~2300]: 피날레      — 소형 핀존 3×7 + 스팁 램프 2개 (235px)
  */
@@ -39,9 +38,25 @@ const TRACK = {
   startY: 100,
   totalHeight: 2400,
   finishY: 2300,
-  wallThick: 12,
+  wallThick: 20,
   rampThick: 14,
   pinRadius: 5,
+} as const;
+
+/** PIN ZONE exclusion regions — chaos obstacles must not overlap these */
+const PIN_ZONES = [
+  { top: 1100, bottom: 1320 },  // Zone C: 5×6 핀존 (y=1130 ± margin)
+  { top: 1840, bottom: 2000 },  // Zone E: 3×5 핀존 (y=1870 ± margin)
+] as const;
+
+/** Stuck marble detection thresholds */
+const STUCK = {
+  speedThreshold: 0.8,  // px/physics-step — 이하면 "정지" 판정
+  time1: 2.0,           // 2초: Level 1 — 부드러운 힘 적용
+  time2: 3.5,           // 3.5초: Level 2 — 강한 속도 리셋
+  time3: 5.0,           // 5초: Level 3 — 텔레포트 + 중앙이동
+  retire: 8.0,          // 8초: Level 4 — 리타이어 처리
+  wallFastTime: 1.0,    // 1초: 벽 근처 끼임 시 빠른 구제 경로
 } as const;
 
 /** Pre-chaos event triggers (seconds after racing phase starts) */
@@ -104,6 +119,16 @@ export class MarbleRaceScene extends BaseScene {
   /** Short-lived flash visuals [{gfx, framesLeft, total}] */
   private readonly flashes: Array<{ gfx: Graphics; framesLeft: number; total: number }> = [];
 
+  // ─── Slowmo frame skip ──────────────────────────
+  private slowmoFrameCounter = 0;
+
+  // ─── Stuck detection ──────────────────────────
+  /** Accumulated stuck time per marble (seconds). Cleared when marble moves. */
+  private readonly stuckTimers = new Map<Marble, number>();
+
+  // ─── Timer cleanup ────────────────────────────
+  private readonly pendingTimers: ReturnType<typeof setTimeout>[] = [];
+
   // ─── Public API ───────────────────────────────
 
   setConfig(config: GameConfig): void { this.config = config; }
@@ -113,7 +138,7 @@ export class MarbleRaceScene extends BaseScene {
   async init(): Promise<void> {
     if (!this.config) return;
 
-    this.physics = new PhysicsWorld({ x: 0, y: 1.2 });
+    this.physics = new PhysicsWorld({ x: 0, y: 0.6 });
 
     this.container.addChild(this.trackContainer);
     this.container.addChild(this.marbleContainer);
@@ -128,10 +153,10 @@ export class MarbleRaceScene extends BaseScene {
     this.startCountdown();
   }
 
-  update(_delta: number): void {
+  update(delta: number): void {
     if (this.phase === 'done' || !this.physics) return;
 
-    const dt = _delta / 60;
+    const dt = delta / 60;
     this.totalElapsed += dt;
 
     if (this.phase === 'countdown') return;
@@ -141,8 +166,9 @@ export class MarbleRaceScene extends BaseScene {
       this.endRace();
       return;
     }
+    const playerCount = this.config!.players.length;
     const lastPickSlowmo = this.config!.pickMode === 'last'
-      && this.finishOrder.length >= this.marbles.length - 1;
+      && this.uniqueFinishedPlayerCount() >= playerCount - 1;
     if (this.phase !== 'slowmo' && (this.totalElapsed >= SLOWMO_SEC || lastPickSlowmo)) {
       this.enterSlowmo();
     } else if (this.phase === 'chaos' && this.totalElapsed >= TENSION_SEC) {
@@ -156,15 +182,37 @@ export class MarbleRaceScene extends BaseScene {
     // Event scheduler
     this.tickEvents();
 
-    // Physics step
+    // 1. Pre-physics: 벽 클램핑 (물리 스텝 전에 수행하여 다음 스텝에 반영)
+    const MARBLE_R = 8;
+    const boundsMinX = TRACK.leftX + TRACK.wallThick / 2 + MARBLE_R + 2;
+    const boundsMaxX = TRACK.rightX - TRACK.wallThick / 2 - MARBLE_R - 2;
+    for (const marble of this.marbles) {
+      if (!marble.retired) marble.clampToBounds(boundsMinX, boundsMaxX);
+    }
+
+    // 2. Physics step — slowmo는 프레임 스킵 방식 (Issue #303 회피)
     if (this.phase === 'slowmo') {
-      if (Math.random() < SLOWMO_RATE) this.physics.update();
+      this.slowmoFrameCounter++;
+      if (this.slowmoFrameCounter % 3 === 0) {
+        this.physics.update(); // 3프레임에 1번 → ~33% 속도
+      }
     } else {
       this.physics.update();
     }
 
-    // Sync marble sprites
-    for (const marble of this.marbles) marble.sync();
+    // 3. Post-physics: 렌더 동기화 + out-of-bounds retire
+    for (const marble of this.marbles) {
+      if (marble.retired) continue;
+      marble.sync();
+
+      const pos = marble.body.position;
+      if (pos.y < TRACK.startY - 100 || pos.y > TRACK.totalHeight + 100) {
+        marble.markRetired();
+      }
+    }
+
+    // Stuck marble detection & rescue (dt in seconds)
+    this.checkStuckMarbles(dt);
 
     // Camera scroll (SubTask 2)
     this.updateCamera();
@@ -184,11 +232,11 @@ export class MarbleRaceScene extends BaseScene {
     this.prevRankIds = sorted.map((m) => m.player.id);
     this.updateRankLabels(sorted);
 
-    // 꼴등뽑기: N-1등 확정 시 즉시 종료, 그 외: 전원 완주 시 종료
+    // 꼴등뽑기: N-1명 완주 시 즉시 종료, 그 외: 전원 완주 시 종료 (marbleCount 중복 제거)
     const endThreshold = this.config!.pickMode === 'last'
-      ? this.marbles.length - 1
-      : this.marbles.length;
-    if (this.finishOrder.length >= endThreshold) this.endRace();
+      ? playerCount - 1
+      : playerCount;
+    if (this.uniqueFinishedPlayerCount() >= endThreshold) this.endRace();
   }
 
   override destroy(): void {
@@ -196,6 +244,8 @@ export class MarbleRaceScene extends BaseScene {
       clearTimeout(this.dragResumeTimer);
       this.dragResumeTimer = null;
     }
+    for (const t of this.pendingTimers) clearTimeout(t);
+    this.pendingTimers.length = 0;
     this.countdown?.destroy();
     this.slowMo?.destroy();
     this.chaos?.destroy();
@@ -233,6 +283,24 @@ export class MarbleRaceScene extends BaseScene {
     this.physics.addBodies(rightWall);
     this.drawStaticBody(rightWall, 0x224422);
 
+    // ── Outer boundary walls (invisible, prevents any escape) ──
+    // 내부 벽 외측 가장자리와 맞닿도록 배치 (겹침 방지)
+    const BOUND_THICK = 40;
+    const halfWall = TRACK.wallThick / 2;
+    const outerLeft = PhysicsWorld.createWall(
+      TRACK.leftX - halfWall - BOUND_THICK / 2, wallCY, BOUND_THICK, wallH,
+      { restitution: 0.3, friction: 0.1 },
+    );
+    const outerRight = PhysicsWorld.createWall(
+      TRACK.rightX + halfWall + BOUND_THICK / 2, wallCY, BOUND_THICK, wallH,
+      { restitution: 0.3, friction: 0.1 },
+    );
+    const outerTop = PhysicsWorld.createWall(
+      cx, TRACK.startY - BOUND_THICK / 2, trackW + BOUND_THICK * 2, BOUND_THICK,
+      { restitution: 0.3, friction: 0.1 },
+    );
+    this.physics.addBodies(outerLeft, outerRight, outerTop);
+
     // ── Wall guide rails (데드존 해소) ────────────────
     this.buildWallGuides();
 
@@ -269,30 +337,31 @@ export class MarbleRaceScene extends BaseScene {
   private buildWallGuides(): void {
     if (!this.physics) return;
 
-    const guideWidth = 45;
-    const guideAngle = 0.35;
+    const guideWidth = 32;       // 45→32: 포켓 깊이 축소
+    const guideAngle = 0.20;     // 0.35→0.20: V자 각도 완화, 자연 탈출 유도
     const startY = 520;
     const endY = 2200;
-    const interval = 120;
-    const wallInset = TRACK.wallThick / 2 + guideWidth / 2 - 4;
+    const interval = 140;        // 120→140: 간격 넓혀 트랩 포인트 감소
+    // 벽~가이드 최소 간격 = wallInset - guideWidth/2*cos(angle) ≈ 22px > 구슬 지름 16px
+    const wallInset = TRACK.wallThick / 2 + guideWidth / 2 + 6;
 
     for (let y = startY; y <= endY; y += interval) {
-      // Left wall guide — angled inward (positive angle pushes right)
+      // Left wall guide — angled inward (positive angle pushes right toward center)
       const leftX = TRACK.leftX + wallInset;
       const leftGuide = PhysicsWorld.createWall(leftX, y, guideWidth, TRACK.rampThick, {
-        angle: -guideAngle,
-        restitution: 0.3,
+        angle: guideAngle,
+        restitution: 0.15,       // 0.5→0.15: 반발 감소, 끼인 구슬 바운스 억제
         friction: 0.01,
         frictionStatic: 0,
       });
       this.physics.addBodies(leftGuide);
       this.drawStaticBody(leftGuide, 0x1a3a2a);
 
-      // Right wall guide — angled inward (negative angle pushes left)
+      // Right wall guide — angled inward (negative angle pushes left toward center)
       const rightX = TRACK.rightX - wallInset;
       const rightGuide = PhysicsWorld.createWall(rightX, y, guideWidth, TRACK.rampThick, {
-        angle: guideAngle,
-        restitution: 0.3,
+        angle: -guideAngle,
+        restitution: 0.15,
         friction: 0.01,
         frictionStatic: 0,
       });
@@ -301,24 +370,25 @@ export class MarbleRaceScene extends BaseScene {
     }
   }
 
-  /** Zone A: 출발 산개 (y=100~520) — 4개 완만 와이드 램프 */
+  /** Zone A: 출발 산개 (y=100~520) — 4개 완만 램프 (폭 200px, 양쪽 갭 45px+) */
   private buildZoneA(cx: number): void {
     this.buildZoneLabel('◀ ZONE A: 출발 ▶', cx, 112, COLORS.brightGreen);
 
     const rampDefs = [
-      { y: 165, width: 260, angle: 0.20 },
-      { y: 258, width: 260, angle: 0.20 },
-      { y: 352, width: 255, angle: 0.25 },
-      { y: 446, width: 255, angle: 0.25 },
+      { y: 165, width: 200, angle: 0.18 },
+      { y: 270, width: 200, angle: 0.18 },
+      { y: 375, width: 195, angle: 0.20 },
+      { y: 470, width: 195, angle: 0.20 },
     ];
     rampDefs.forEach(({ y, width, angle }, i) => {
       const dir = i % 2 === 0 ? 1 : -1;
-      const rampX = cx + dir * 15;
+      const rampX = cx + dir * 10;
       const body = PhysicsWorld.createWall(rampX, y, width, TRACK.rampThick, {
         angle: -angle * dir,
-        restitution: 0.25,
-        friction: 0.01,
+        restitution: 0.15,
+        friction: 0.02,
         frictionStatic: 0,
+        chamfer: { radius: 2 },
       });
       this.physics!.addBodies(body);
       this.drawRamp(body, i);
@@ -350,6 +420,20 @@ export class MarbleRaceScene extends BaseScene {
     this.physics.addBodies(rightWedge);
     this.drawStaticBody(rightWedge, 0x3a1a1a);
 
+    // Kick bump — 병목 직후 중앙에 배치, 끼임 구슬을 좌우로 튕겨냄
+    const kickPin = PhysicsWorld.createBall(cx, y + 12, 3, {
+      isStatic: true,
+      restitution: 0.8,
+      friction: 0,
+      label: 'kick-bump',
+    });
+    this.physics.addBodies(kickPin);
+    const kickGfx = new Graphics();
+    kickGfx.circle(0, 0, 3);
+    kickGfx.fill({ color: 0xffaa00 });
+    kickGfx.position.set(cx, y + 12);
+    this.trackContainer.addChild(kickGfx);
+
     // Warning label
     const label = new Text({
       text: '▼ NARROW ▼',
@@ -367,6 +451,8 @@ export class MarbleRaceScene extends BaseScene {
 
     const cx = (TRACK.leftX + TRACK.rightX) / 2;
     const rowH = spacing * 0.866; // equilateral triangle row height
+    const wallMin = TRACK.leftX + TRACK.wallThick / 2 + 25; // 벽~핀 최소 간격 25px
+    const wallMax = TRACK.rightX - TRACK.wallThick / 2 - 25;
 
     for (let row = 0; row < rows; row++) {
       const stagger = row % 2 === 1 ? spacing / 2 : 0;
@@ -374,12 +460,10 @@ export class MarbleRaceScene extends BaseScene {
         const pinX = cx + (col - (cols - 1) / 2) * spacing + stagger;
         const pinY = startY + row * rowH;
 
-        const pin = PhysicsWorld.createBall(pinX, pinY, TRACK.pinRadius, {
-          isStatic: true,
-          friction: 0.05,
-          restitution: 0.55,
-          label: 'pin',
-        });
+        // 벽 근처 핀 스킵 — 벽~핀 사이 끼임 방지
+        if (pinX < wallMin || pinX > wallMax) continue;
+
+        const pin = PhysicsWorld.createPin(pinX, pinY, TRACK.pinRadius);
         this.physics.addBodies(pin);
 
         const g = new Graphics();
@@ -400,50 +484,54 @@ export class MarbleRaceScene extends BaseScene {
     this.trackContainer.addChild(label);
   }
 
-  /** Zone C: 핀볼 카오스 (y=800~1300) — 미디엄 램프 3개 + 7×5 대형 핀존 */
+  /** Zone C: 핀볼 카오스 (y=800~1300) — 미디엄 램프 3개 + 6×5 대형 핀존 */
   private buildZoneC(cx: number): void {
     this.buildZoneLabel('◆ ZONE C: 카오스 ◆', cx, 812, COLORS.primary);
 
     const rampDefs = [
-      { y: 860, width: 250, angle: 0.30 },
-      { y: 950, width: 250, angle: 0.30 },
-      { y: 1040, width: 250, angle: 0.30 },
+      { y: 860, width: 195, angle: 0.25 },
+      { y: 960, width: 195, angle: 0.25 },
+      { y: 1060, width: 195, angle: 0.25 },
     ];
     rampDefs.forEach(({ y, width, angle }, i) => {
+      // 1,-1,1 패턴 — 첫 램프 좌측 방향으로 Zone A와 교대 연결
       const dir = i % 2 === 0 ? 1 : -1;
-      const rampX = cx + dir * 15;
+      const rampX = cx + dir * 10;
       const body = PhysicsWorld.createWall(rampX, y, width, TRACK.rampThick, {
         angle: -angle * dir,
-        restitution: 0.30,
-        friction: 0.01,
+        restitution: 0.20,
+        friction: 0.02,
         frictionStatic: 0,
+        chamfer: { radius: 2 },
       });
       this.physics!.addBodies(body);
       this.drawRamp(body, i + 4);
     });
 
-    // 8×5 대형 핀존 (spacing=34 → 커버 폭 238px, 트랙 82%)
-    this.buildPinZone(1110, 5, 8, 34);
+    // 6×5 핀존 (cols 7→6: 최외곽 핀~벽 간격 44px+ 확보, 끼임 방지)
+    this.buildPinZone(1130, 5, 6, 42);
   }
 
   /** Zone D: 클라이맥스 (y=1300~1800) — 스팁 램프 3개 + 좁은 병목2 + 계단식 드롭 */
   private buildZoneD(cx: number): void {
     this.buildZoneLabel('⚡ ZONE D: 클라이맥스 ⚡', cx, 1312, COLORS.gold);
 
-    // 스팁 램프 3개 (angle 0.40~0.45, width 245)
+    // 스팁 램프 3개 (angle 0.30~0.35, width 190)
     const rampDefs = [
-      { y: 1360, width: 245, angle: 0.40 },
-      { y: 1440, width: 245, angle: 0.40 },
-      { y: 1520, width: 245, angle: 0.45 },
+      { y: 1360, width: 190, angle: 0.30 },
+      { y: 1450, width: 190, angle: 0.30 },
+      { y: 1540, width: 190, angle: 0.35 },
     ];
     rampDefs.forEach(({ y, width, angle }, i) => {
-      const dir = i % 2 === 0 ? -1 : 1; // 방향 반전으로 시각적 다양화
-      const rampX = cx + dir * 15;
+      // Zone C(1,-1,1=좌,우,좌)와 교대: -1,1,-1 → 우,좌,우
+      const dir = i % 2 === 0 ? -1 : 1;
+      const rampX = cx + dir * 10;
       const body = PhysicsWorld.createWall(rampX, y, width, TRACK.rampThick, {
         angle: -angle * dir,
-        restitution: 0.35,
-        friction: 0.01,
+        restitution: 0.20,
+        friction: 0.02,
         frictionStatic: 0,
+        chamfer: { radius: 2 },
       });
       this.physics!.addBodies(body);
       this.drawRamp(body, i + 7);
@@ -460,22 +548,23 @@ export class MarbleRaceScene extends BaseScene {
   private buildZoneE(cx: number): void {
     this.buildZoneLabel('🏁 ZONE E: 피날레 🏁', cx, 1812, COLORS.gold);
 
-    // 소형 핀존 3×7 (spacing=34, 커버 폭 204px, 트랙 70%)
-    this.buildPinZone(1870, 3, 7, 34);
+    // 소형 핀존 3×5 (cols 6→5: 벽 간격 확보, spacing=42)
+    this.buildPinZone(1870, 3, 5, 42);
 
-    // 스팁 피날레 램프 2개 (angle=0.48, width=235)
+    // 피날레 램프 2개 (angle=0.35, width=185)
     const rampDefs = [
-      { y: 1975, width: 235, angle: 0.48 },
-      { y: 2060, width: 235, angle: 0.48 },
+      { y: 1985, width: 185, angle: 0.35 },
+      { y: 2080, width: 185, angle: 0.35 },
     ];
     rampDefs.forEach(({ y, width, angle }, i) => {
       const dir = i % 2 === 0 ? 1 : -1;
-      const rampX = cx + dir * 15;
+      const rampX = cx + dir * 10;
       const body = PhysicsWorld.createWall(rampX, y, width, TRACK.rampThick, {
         angle: -angle * dir,
-        restitution: 0.40,
-        friction: 0.008,
+        restitution: 0.20,
+        friction: 0.02,
         frictionStatic: 0,
+        chamfer: { radius: 2 },
       });
       this.physics!.addBodies(body);
       this.drawRamp(body, i + 12);
@@ -504,6 +593,7 @@ export class MarbleRaceScene extends BaseScene {
         restitution: 0.30,
         friction: 0.04,
         frictionStatic: 0,
+        chamfer: { radius: 2 },
       });
       this.physics.addBodies(shelf);
       this.drawRamp(shelf, i + 10);
@@ -587,15 +677,21 @@ export class MarbleRaceScene extends BaseScene {
   private buildMarbles(): void {
     if (!this.config || !this.physics) return;
     const { players } = this.config;
+    const marbleCount = this.config.marbleCount ?? 1;
     const cx = (TRACK.leftX + TRACK.rightX) / 2;
-    const spacing = Math.min(24, (TRACK.rightX - TRACK.leftX - 40) / players.length);
+    const totalMarbles = players.length * marbleCount;
+    const spacing = Math.min(20, (TRACK.rightX - TRACK.leftX - 40) / totalMarbles);
 
-    players.forEach((player, i) => {
-      const offset = (i - (players.length - 1) / 2) * spacing;
-      const marble = new Marble(player, cx + offset, TRACK.startY + 10);
-      this.physics!.addBodies(marble.body);
-      this.marbles.push(marble);
-      this.marbleContainer.addChild(marble.container);
+    let idx = 0;
+    players.forEach((player) => {
+      for (let m = 0; m < marbleCount; m++) {
+        const offset = (idx - (totalMarbles - 1) / 2) * spacing;
+        const marble = new Marble(player, cx + offset, TRACK.startY + 10);
+        this.physics!.addBodies(marble.body);
+        this.marbles.push(marble);
+        this.marbleContainer.addChild(marble.container);
+        idx++;
+      }
     });
 
     this.prevRankIds = players.map((p) => p.id);
@@ -645,7 +741,7 @@ export class MarbleRaceScene extends BaseScene {
         style: { fontFamily: FONT_DISPLAY, fontSize: 9, fill: COLORS.gold },
       });
       label.anchor.set(0.5, 1);
-      this.uiContainer.addChild(label);
+      this.marbleContainer.addChild(label);
       this.rankLabels.push(label);
     });
   }
@@ -676,8 +772,7 @@ export class MarbleRaceScene extends BaseScene {
 
   /**
    * Lerp the viewport so the leading *unfinished* marble sits at 35% from top.
-   * When a marble crosses the goal, camera switches to the next active leader.
-   * If all marbles finished, hold the last finished marble's position.
+   * Adaptive lerp: faster when camera is far from target (빈 화면 방지).
    * Skips auto-tracking while user is dragging.
    */
   private updateCamera(): void {
@@ -692,6 +787,7 @@ export class MarbleRaceScene extends BaseScene {
     let target: Marble | undefined;
 
     if (active.length > 0) {
+      // 가장 진행이 많은(y가 큰) 활성 구슬 추적
       target = active.reduce((best, m) =>
         m.body.position.y > best.body.position.y ? m : best,
       );
@@ -708,7 +804,18 @@ export class MarbleRaceScene extends BaseScene {
       ),
     );
 
-    this.cameraY += (targetY - this.cameraY) * 0.06;
+    // Adaptive lerp — 거리가 크면 빠르게 보정, 가까우면 부드럽게
+    const dist = Math.abs(targetY - this.cameraY);
+    let lerpFactor: number;
+    if (dist > DESIGN_HEIGHT * 0.8) {
+      lerpFactor = 0.25;  // 즉시 보정 수준
+    } else if (dist > DESIGN_HEIGHT * 0.5) {
+      lerpFactor = 0.15;  // 빠른 보정
+    } else {
+      lerpFactor = 0.06;  // 기본 부드러운 추적
+    }
+
+    this.cameraY += (targetY - this.cameraY) * lerpFactor;
 
     this.trackContainer.y = -this.cameraY;
     this.marbleContainer.y = -this.cameraY;
@@ -816,11 +923,11 @@ export class MarbleRaceScene extends BaseScene {
     if (!last) return;
 
     const vel = last.body.velocity;
-    Matter.Body.setVelocity(last.body, { x: vel.x * 1.8, y: vel.y * 1.8 - 4 });
+    Matter.Body.setVelocity(last.body, { x: vel.x * 1.1, y: vel.y + 1.5 });
 
     this.spawnWorldFlash(last.body.position.x, last.body.position.y, COLORS.brightGreen, 20);
     this.setPhaseLabel('🚀 꼴찌 부스터!');
-    setTimeout(() => { if (this.phase !== 'done') this.setPhaseLabel(''); }, 1500);
+    this.pendingTimers.push(setTimeout(() => { if (this.phase !== 'done') this.setPhaseLabel(''); }, 1500));
     this.shaker.shake(this.marbleContainer, 2, 3);
   }
 
@@ -830,11 +937,11 @@ export class MarbleRaceScene extends BaseScene {
     const leader = sorted[0];
     if (!leader) return;
 
-    Matter.Body.applyForce(leader.body, leader.body.position, { x: 0, y: -0.08 });
+    Matter.Body.applyForce(leader.body, leader.body.position, { x: (Math.random() - 0.5) * 0.02, y: -0.01 });
 
     this.spawnWorldFlash(leader.body.position.x, leader.body.position.y - 20, COLORS.gold, 20);
     this.setPhaseLabel('⚡ 선두 낙뢰!');
-    setTimeout(() => { if (this.phase !== 'done') this.setPhaseLabel(''); }, 1500);
+    this.pendingTimers.push(setTimeout(() => { if (this.phase !== 'done') this.setPhaseLabel(''); }, 1500));
     this.shaker.shake(this.marbleContainer, 4, 5);
   }
 
@@ -848,7 +955,7 @@ export class MarbleRaceScene extends BaseScene {
       const dx = marble.body.position.x - cx;
       const dy = marble.body.position.y - cy;
       const dist = Math.max(10, Math.sqrt(dx * dx + dy * dy));
-      const force = 0.12 / dist;
+      const force = Math.min(0.05, 0.12 / dist);
       Matter.Body.applyForce(marble.body, marble.body.position, {
         x: dx * force,
         y: dy * force,
@@ -913,50 +1020,57 @@ export class MarbleRaceScene extends BaseScene {
     this.chaos.play(this.uiContainer, (TRACK.startY - 20) / 2 + 12);
     this.shaker.shake(this.marbleContainer, 5, 6);
 
-    this.physics.setGravity(0.4, 0.8);
-
-    // 50% chance: brief gravity reversal
+    // 카오스 이벤트: 50% 횡풍(좌우 흔들림) OR 50% 폭발+장애물
     if (Math.random() < 0.5) {
-      this.physics.setGravity(0, -0.4);
-      setTimeout(() => {
-        if (this.physics && this.phase !== 'done') this.physics.setGravity(0.4, 0.8);
-      }, 800);
-    }
+      // 횡풍 — 짧은 좌우 중력으로 순위 섞기 (역주행 없이)
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      this.physics.setGravity(dir * 0.3, 0.6);
+      this.pendingTimers.push(setTimeout(() => {
+        if (this.physics && this.phase !== 'done') this.physics.setGravity(0, 0.6);
+      }, 600));
+    } else {
+      // 폭발 + 장애물 (PIN ZONE 회피)
+      this.fireExplosion();
 
-    // 60% chance: explosion
-    if (Math.random() < 0.6) this.fireExplosion();
+      const cx = (TRACK.leftX + TRACK.rightX) / 2;
+      const baseY = this.cameraY + DESIGN_HEIGHT * 0.5;
+      const rawPositions = [
+        { x: cx - 60, y: baseY - 100, angle: 0.5 },
+        { x: cx + 60, y: baseY - 50,  angle: -0.5 },
+        { x: cx - 30, y: baseY + 80,  angle: 0.3 },
+        { x: cx + 30, y: baseY + 150, angle: -0.3 },
+      ];
 
-    // 4 chaos obstacles spread around current camera view
-    const cx = (TRACK.leftX + TRACK.rightX) / 2;
-    const baseY = this.cameraY + DESIGN_HEIGHT * 0.5;
-    const obstPositions = [
-      { x: cx - 60, y: baseY - 100, angle: 0.5 },
-      { x: cx + 60, y: baseY - 50,  angle: -0.5 },
-      { x: cx - 30, y: baseY + 80,  angle: 0.3 },
-      { x: cx + 30, y: baseY + 150, angle: -0.3 },
-    ] as const;
-
-    for (const pos of obstPositions) {
-      const body = PhysicsWorld.createWall(pos.x, pos.y, 70, 10, {
-        angle: pos.angle,
-        restitution: 0.8,
+      // PIN ZONE exclusion — 겹치는 장애물은 핀존 아래로 재배치
+      const obstPositions = rawPositions.filter((pos) => {
+        for (const zone of PIN_ZONES) {
+          if (pos.y >= zone.top && pos.y <= zone.bottom) return false;
+        }
+        return true;
       });
-      this.physics.addBodies(body);
-      this.chaosObstacles.push(body);
 
-      const g = new Graphics();
-      g.rect(-35, -5, 70, 10);
-      g.fill({ color: COLORS.primary, alpha: 0.7 });
-      g.position.set(pos.x, pos.y);
-      g.rotation = pos.angle;
-      g.label = `chaos-obstacle-${this.chaosObstacles.length - 1}`;
-      this.trackContainer.addChild(g);
+      for (const pos of obstPositions) {
+        const body = PhysicsWorld.createWall(pos.x, pos.y, 70, 10, {
+          angle: pos.angle,
+          restitution: 0.8,
+        });
+        this.physics.addBodies(body);
+        this.chaosObstacles.push(body);
+
+        const g = new Graphics();
+        g.rect(-35, -5, 70, 10);
+        g.fill({ color: COLORS.primary, alpha: 0.7 });
+        g.position.set(pos.x, pos.y);
+        g.rotation = pos.angle;
+        g.label = `chaos-obstacle-${this.chaosObstacles.length - 1}`;
+        this.trackContainer.addChild(g);
+      }
     }
   }
 
   private removeChaosObstacles(): void {
     if (!this.physics) return;
-    this.physics.setGravity(0, 1.2);
+    this.physics.setGravity(0, 0.6);
 
     for (const body of this.chaosObstacles) this.physics.removeBodies(body);
     this.chaosObstacles = [];
@@ -964,7 +1078,10 @@ export class MarbleRaceScene extends BaseScene {
     const toRemove = this.trackContainer.children.filter(
       (c) => typeof c.label === 'string' && c.label.startsWith('chaos-obstacle'),
     );
-    for (const child of toRemove) this.trackContainer.removeChild(child);
+    for (const child of toRemove) {
+      this.trackContainer.removeChild(child);
+      child.destroy();
+    }
   }
 
   private enterSlowmo(): void {
@@ -1016,8 +1133,6 @@ export class MarbleRaceScene extends BaseScene {
   }
 
   private updateRankLabels(sorted: Marble[]): void {
-    const hudH = TRACK.startY - 20; // HUD bottom edge (screen space)
-
     for (let rank = 0; rank < sorted.length; rank++) {
       const marble = sorted[rank];
       if (!marble) continue;
@@ -1025,25 +1140,106 @@ export class MarbleRaceScene extends BaseScene {
       const label = this.rankLabels[idx];
       if (!label) continue;
 
-      // World → screen coordinate conversion
-      const screenY = marble.container.y - this.cameraY;
+      // Label follows marble in world space (both in marbleContainer)
+      label.text = `${rank + 1}위`;
+      label.x = marble.container.x;
+      label.y = marble.container.y - marble.radius - 4;
+      label.visible = !marble.retired;
+    }
+  }
 
-      if (screenY < hudH + 10 || screenY > DESIGN_HEIGHT - 10) {
-        label.visible = false;
+  /** 완주한 고유 플레이어 수 (marbleCount > 1일 때 중복 제거) */
+  private uniqueFinishedPlayerCount(): number {
+    return new Set(this.finishOrder.map((m) => m.player.id)).size;
+  }
+
+  /**
+   * 끼임 구슬 감지 및 3단계 해소.
+   * 속도 < threshold 상태가 지속되면 단계별로 개입한다.
+   * @param dt — 경과 시간 (초 단위)
+   */
+  private checkStuckMarbles(dt: number): void {
+    if (this.phase === 'countdown' || this.phase === 'done') return;
+
+    const minX = TRACK.leftX + TRACK.wallThick / 2 + 10;
+    const maxX = TRACK.rightX - TRACK.wallThick / 2 - 10;
+    const cx = (TRACK.leftX + TRACK.rightX) / 2;
+    const wallZone = 25; // 벽 근처 판정 거리
+
+    for (const marble of this.marbles) {
+      if (marble.finished) {
+        this.stuckTimers.delete(marble);
+        continue;
+      }
+
+      const vel = marble.body.velocity;
+      const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+
+      if (speed < STUCK.speedThreshold) {
+        const prev = this.stuckTimers.get(marble) ?? 0;
+        const next = prev + dt;
+        this.stuckTimers.set(marble, next);
+
+        const pos = marble.body.position;
+        const nearWall = pos.x < minX + wallZone || pos.x > maxX - wallZone;
+
+        // 벽 근처 빠른 구제 — 1초만에 중앙 방향으로 강제 이동
+        if (nearWall && next >= STUCK.wallFastTime && prev < STUCK.wallFastTime) {
+          const dir = pos.x < cx ? 1 : -1;
+          Matter.Body.setVelocity(marble.body, { x: dir * 3, y: 2 });
+        }
+
+        if (next >= STUCK.retire) {
+          // Level 4: 리타이어 — 더 이상 구제 불가
+          marble.markRetired();
+          this.stuckTimers.delete(marble);
+          continue;
+        } else if (next >= STUCK.time3) {
+          // Level 3: 텔레포트 — 중앙 근처로 수평이동 + 50px 위
+          const newX = cx + (Math.random() - 0.5) * 60;
+          const newY = Math.max(TRACK.startY, pos.y - 50);
+          Matter.Body.setPosition(marble.body, { x: newX, y: newY });
+          Matter.Body.setVelocity(marble.body, {
+            x: (Math.random() - 0.5) * 3,
+            y: 2,
+          });
+          this.stuckTimers.set(marble, 0);
+        } else if (next >= STUCK.time2 && prev < STUCK.time2) {
+          // Level 2: 강한 속도 리셋 (중앙 반대 방향으로)
+          const dir = pos.x < cx ? 1 : -1;
+          Matter.Body.setVelocity(marble.body, { x: dir * 2, y: 3 });
+        } else if (next >= STUCK.time1 && prev < STUCK.time1) {
+          // Level 1: 부드러운 하방 힘 적용
+          const dir = Math.random() < 0.5 ? 1 : -1;
+          Matter.Body.applyForce(marble.body, marble.body.position, {
+            x: dir * 0.004,
+            y: 0.006,
+          });
+        }
       } else {
-        label.visible = true;
-        label.text = `${rank + 1}위`;
-        label.x = marble.container.x;
-        label.y = screenY - marble.radius - 4;
+        this.stuckTimers.delete(marble);
       }
     }
   }
 
+  /**
+   * 플레이어별 최고 결과로 중복 제거한 최종 랭킹.
+   * marbleCount > 1 시 같은 플레이어의 여러 구슬 중 가장 앞선 것만 반영.
+   */
   private buildRankings(): RankingEntry[] {
-    return this.getSortedByProgress().map((marble, i) => ({
-      player: marble.player,
-      rank: i + 1,
-      finishTime: marble.finished ? marble.finishTime : undefined,
-    }));
+    const sorted = this.getSortedByProgress();
+    const seen = new Set<number>();
+    const result: RankingEntry[] = [];
+    for (const marble of sorted) {
+      if (!seen.has(marble.player.id)) {
+        seen.add(marble.player.id);
+        result.push({
+          player: marble.player,
+          rank: result.length + 1,
+          finishTime: marble.finished ? marble.finishTime : undefined,
+        });
+      }
+    }
+    return result;
   }
 }

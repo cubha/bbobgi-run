@@ -24,13 +24,18 @@ export class PhysicsWorld {
       gravity,
       positionIterations: 10,  // 기본 6 → 경사면 정확도 향상
       velocityIterations: 8,   // 기본 4 → 속도 계산 안정화
+      enableSleeping: false,   // 구슬이 잠들어 중력 무시하는 현상 방지
     });
     this.world = this.engine.world;
   }
 
-  /** Step the physics simulation with fixed timestep */
-  update(): void {
-    Matter.Engine.update(this.engine, FIXED_DELTA);
+  /** Step the physics simulation with fixed timestep (4 sub-steps for CCD) */
+  update(deltaScale = 1): void {
+    const subSteps = 4;
+    const dt = (FIXED_DELTA * deltaScale) / subSteps;
+    for (let i = 0; i < subSteps; i++) {
+      Matter.Engine.update(this.engine, dt);
+    }
   }
 
   /** Add bodies to the world */
@@ -75,10 +80,10 @@ export class PhysicsWorld {
   /** Create a dynamic circle (marble/ball) */
   static createBall(x: number, y: number, radius: number, options?: Matter.IBodyDefinition): Matter.Body {
     return Matter.Bodies.circle(x, y, radius, {
-      restitution: 0.5,
-      friction: 0.005,
-      frictionAir: 0.003,
-      frictionStatic: 0.02,
+      restitution: 0.3,    // 0.5 → 0.3: 반발 줄여 역주행/튕김 감소
+      friction: 0.01,      // 0.05 → 0.01: 경사면 구름 최적화 (RESEARCH 권장 0.005~0.01)
+      frictionAir: 0.01,   // 0.001 → 0.01: 공기저항 증가로 최고속도 제한
+      frictionStatic: 0.03,
       ...options,
     });
   }

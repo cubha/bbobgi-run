@@ -30,6 +30,9 @@ export class MainMenuScene extends BaseScene {
   private ballCountBtns: Graphics[] = [];
   private lapCountContainer: Container | null = null;
   private lapDropdown: HTMLSelectElement | null = null;
+  private selectedMarbleCount: number = 1;
+  private marbleCountContainer: Container | null = null;
+  private marbleCountDropdown: HTMLSelectElement | null = null;
   private nameInput: NameInput | null = null;
   private startBtn: Button | null = null;
   private initialPlayers: Player[] = [];
@@ -58,6 +61,7 @@ export class MainMenuScene extends BaseScene {
       this.selectedGameMode = this.initialConfig.mode;
       if (this.initialConfig.ballCount != null) this.selectedBallCount = this.initialConfig.ballCount;
       if (this.initialConfig.lapCount != null) this.selectedLapCount = this.initialConfig.lapCount;
+      if (this.initialConfig.marbleCount != null) this.selectedMarbleCount = this.initialConfig.marbleCount;
     }
     this.buildBackground();
     this.buildTitle();
@@ -65,6 +69,7 @@ export class MainMenuScene extends BaseScene {
     this.buildGameModeSection();
     this.buildBallCountSection();
     this.buildLapCountSection();
+    this.buildMarbleCountSection();
     this.buildNameInputSection();
     this.buildStartButton();
     this.updateStartButton();
@@ -81,6 +86,8 @@ export class MainMenuScene extends BaseScene {
     this.nameInput = null;
     this.lapDropdown?.remove();
     this.lapDropdown = null;
+    this.marbleCountDropdown?.remove();
+    this.marbleCountDropdown = null;
     super.destroy();
   }
 
@@ -214,6 +221,12 @@ export class MainMenuScene extends BaseScene {
     if (this.lapDropdown) {
       this.lapDropdown.style.display = mode === 'horse' ? '' : 'none';
     }
+    if (this.marbleCountContainer) {
+      this.marbleCountContainer.visible = mode === 'marble';
+    }
+    if (this.marbleCountDropdown) {
+      this.marbleCountDropdown.style.display = mode === 'marble' ? '' : 'none';
+    }
   }
 
   // ─── Ball Count Section ───────────────────────
@@ -323,6 +336,62 @@ export class MainMenuScene extends BaseScene {
     if (this.selectedGameMode !== 'horse') select.style.display = 'none';
   }
 
+  // ─── Marble Count Section ─────────────────────
+
+  private buildMarbleCountSection(): void {
+    const ctr = new Container();
+    ctr.visible = this.selectedGameMode === 'marble';
+    this.container.addChild(ctr);
+    this.marbleCountContainer = ctr;
+
+    ctr.addChild(new SectionLabel({ text: '구슬 수', y: 584 }).container);
+
+    const { scale, offsetX, offsetY } = this.app.scaleInfo;
+    const designX = 16;
+    const designY = 604;
+    const designW = 358;
+    const designH = 38;
+
+    const select = document.createElement('select');
+    select.style.cssText = [
+      `position: fixed`,
+      `left: ${Math.round(designX * scale + offsetX)}px`,
+      `top: ${Math.round(designY * scale + offsetY)}px`,
+      `width: ${Math.round(designW * scale)}px`,
+      `height: ${Math.round(designH * scale)}px`,
+      `font-size: ${Math.round(16 * scale)}px`,
+      `font-family: monospace`,
+      `background: #1a1a2e`,
+      `color: #ffffff`,
+      `border: 2px solid #ff2d78`,
+      `border-radius: ${Math.round(6 * scale)}px`,
+      `padding: 0 ${Math.round(8 * scale)}px`,
+      `cursor: pointer`,
+      `outline: none`,
+      `appearance: none`,
+      `-webkit-appearance: none`,
+      `z-index: 10`,
+    ].join(';');
+
+    for (let n = 1; n <= 5; n++) {
+      const opt = document.createElement('option');
+      opt.value = `${n}`;
+      opt.text = `${n}개`;
+      if (n === this.selectedMarbleCount) opt.selected = true;
+      select.appendChild(opt);
+    }
+
+    select.addEventListener('change', () => {
+      this.selectedMarbleCount = parseInt(select.value, 10);
+    });
+
+    const gameContainer = document.getElementById('game-container');
+    (gameContainer ?? document.body).appendChild(select);
+    this.marbleCountDropdown = select;
+
+    if (this.selectedGameMode !== 'marble') select.style.display = 'none';
+  }
+
   // ─── Name Input Section ───────────────────────
 
   private buildNameInputSection(): void {
@@ -383,6 +452,7 @@ export class MainMenuScene extends BaseScene {
       pickMode: this.selectedPickMode,
       ballCount: this.selectedBallCount,
       lapCount: this.selectedLapCount,
+      marbleCount: this.selectedMarbleCount,
       seed: Date.now(),
     });
   }

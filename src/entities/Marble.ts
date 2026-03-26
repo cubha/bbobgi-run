@@ -21,6 +21,7 @@ export class Marble {
   private nameLabel: Text;
   private _finished = false;
   private _finishTime = 0;
+  private _retired = false;
 
   constructor(player: Player, x: number, y: number, options?: Matter.IBodyDefinition) {
     this.player = player;
@@ -65,10 +66,22 @@ export class Marble {
     return this._finishTime;
   }
 
+  get retired(): boolean {
+    return this._retired;
+  }
+
   /** Mark this marble as finished */
   markFinished(time: number): void {
     this._finished = true;
     this._finishTime = time;
+  }
+
+  /** Mark this marble as retired (stuck/out-of-bounds) */
+  markRetired(): void {
+    this._retired = true;
+    this._finished = true;
+    this._finishTime = Infinity;
+    this.container.alpha = 0.3;
   }
 
   /** Sync PixiJS container position/rotation with Matter.js body */
@@ -78,26 +91,38 @@ export class Marble {
     this.bodyGfx.rotation = this.body.angle;
   }
 
+  /** Clamp physics body within track bounds (call BEFORE physics step) */
+  clampToBounds(boundsMinX: number, boundsMaxX: number): void {
+    const pos = this.body.position;
+    if (pos.x < boundsMinX || pos.x > boundsMaxX) {
+      const clampedX = Math.max(boundsMinX, Math.min(boundsMaxX, pos.x));
+      Matter.Body.setPosition(this.body, { x: clampedX, y: pos.y });
+      const vel = this.body.velocity;
+      // 반전 계수 0.3: 벽 근처 반복 바운스 감쇠
+      Matter.Body.setVelocity(this.body, { x: -vel.x * 0.3, y: vel.y });
+    }
+  }
+
   private drawMarble(): void {
     const g = this.bodyGfx;
     const r = this.radius;
-    const dark = this.darken(this.color, 0.4);
+    const dark = this.darken(this.color, 0.3);
 
-    // Shadow (offset rect)
-    g.rect(-r + 2, -r + 2, r * 2, r * 2);
+    // Shadow circle (offset)
+    g.circle(1.5, 1.5, r);
     g.fill({ color: 0x000000, alpha: 0.25 });
 
-    // Main square (dot-style)
-    g.rect(-r, -r, r * 2, r * 2);
+    // Main circle
+    g.circle(0, 0, r);
     g.fill({ color: this.color });
 
-    // Top-left highlight (2px dot)
-    g.rect(-r + 2, -r + 2, 4, 4);
-    g.fill({ color: 0xffffff, alpha: 0.8 });
+    // Highlight (upper-left)
+    g.circle(-r * 0.3, -r * 0.3, r * 0.35);
+    g.fill({ color: 0xffffff, alpha: 0.45 });
 
-    // Bottom-right shadow dot
-    g.rect(r - 4, r - 4, 4, 4);
-    g.fill({ color: dark });
+    // Bottom-right dark accent
+    g.circle(r * 0.3, r * 0.3, r * 0.25);
+    g.fill({ color: dark, alpha: 0.5 });
   }
 
   private darken(color: number, amount: number): number {
