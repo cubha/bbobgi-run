@@ -70,10 +70,11 @@ export class SpiralSegment extends BaseSegment {
         COLORS.blue,
       );
 
-      // 내벽 (교대 배치: 짝수 인덱스만)
-      if (i % 2 === 0) {
+      // 내벽 (교대 배치: 3개에 1개만 — 밀도 낮춰 끼임 방지)
+      if (i % 3 === 0) {
         const innerX = this.originX + Math.cos(angle) * innerR;
-        const innerY = this.originY + Math.sin(angle) * innerR * 0.3 + yDrop;
+        // 내벽 Y 압축 비율을 외벽(0.3)보다 낮춰 내벽-외벽 간격 확보
+        const innerY = this.originY + Math.sin(angle) * innerR * 0.15 + yDrop;
 
         this.addWall(
           physics,

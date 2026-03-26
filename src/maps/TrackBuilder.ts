@@ -1,4 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
+import type Matter from 'matter-js';
 import { PhysicsWorld } from '@core/PhysicsWorld';
 import { COLORS, FONT_DISPLAY } from '@utils/constants';
 import type { TrackLayout, TrackSegmentDef } from './types';

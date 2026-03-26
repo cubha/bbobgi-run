@@ -248,6 +248,17 @@ export class MarbleRaceScene extends BaseScene {
     this.camera = null;
     for (const t of this.pendingTimers) clearTimeout(t);
     this.pendingTimers.length = 0;
+    this.stuckTimers.clear();
+
+    // Marble 바디 제거 + PixiJS 파괴
+    for (const marble of this.marbles) {
+      if (this.physics) this.physics.removeBodies(marble.body);
+      marble.destroy();
+    }
+    this.marbles.length = 0;
+    this.rankLabels.length = 0;
+    this.finishOrder.length = 0;
+
     this.countdown?.destroy();
     this.slowMo?.destroy();
     this.chaos?.destroy();
@@ -381,6 +392,14 @@ export class MarbleRaceScene extends BaseScene {
 
   private updateCameraTracking(): void {
     if (!this.camera) return;
+
+    // 슬로모/종료: 선두(또는 남은 유일한) 구슬 단독 추적
+    if (this.phase === 'slowmo' || this.phase === 'done') {
+      const sorted = this.getSortedByProgress().filter(m => !m.retired);
+      const leader = sorted[0];
+      if (leader) this.camera.followLeader(leader.body.position.x, leader.body.position.y);
+      return;
+    }
 
     const active = this.marbles.filter((m) => !m.finished && !m.retired);
 
