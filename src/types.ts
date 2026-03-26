@@ -8,6 +8,7 @@ export type PickMode = 'first' | 'last';
 export interface Player {
   id: number;
   name: string;
+  isDummy?: boolean;
 }
 
 /** Game configuration passed from MainMenu to GameScene */
