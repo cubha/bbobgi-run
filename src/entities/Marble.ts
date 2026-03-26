@@ -2,9 +2,16 @@ import { Container, Graphics, Text } from 'pixi.js';
 import Matter from 'matter-js';
 import { PhysicsWorld } from '@core/PhysicsWorld';
 import { PLAYER_COLORS, FONT_BODY } from '@utils/constants';
+import { DUMMY_COLORS } from '@maps/TrackData';
 import type { Player } from '@/types';
 
-const MARBLE_RADIUS = 8;
+/** 더미 구슬 색상 순환 카운터 */
+let dummyColorIndex = 0;
+
+/** 더미 색상 인덱스 초기화 (새 레이스 시작 시 호출) */
+export const resetDummyColorIndex = (): void => {
+  dummyColorIndex = 0;
+};
 
 /**
  * Marble entity — links a Matter.js circle body to a PixiJS Container.
@@ -22,19 +29,37 @@ export class Marble {
   private _finished = false;
   private _finishTime = 0;
   private _retired = false;
+  private _isDummy: boolean;
 
-  constructor(player: Player, x: number, y: number, options?: Matter.IBodyDefinition) {
+  constructor(
+    player: Player,
+    x: number,
+    y: number,
+    radius = 12,
+    options?: Matter.IBodyDefinition,
+  ) {
     this.player = player;
-    this.radius = MARBLE_RADIUS;
-    this.color = PLAYER_COLORS[player.id % PLAYER_COLORS.length];
+    this.radius = radius;
+    this._isDummy = player.isDummy === true;
 
-    // Physics body
-    this.body = PhysicsWorld.createBall(x, y, this.radius, options);
+    // 더미 구슬은 회색 계열, 일반 구슬은 플레이어 색상
+    if (this._isDummy) {
+      this.color = DUMMY_COLORS[dummyColorIndex % DUMMY_COLORS.length];
+      dummyColorIndex++;
+    } else {
+      this.color = PLAYER_COLORS[player.id % PLAYER_COLORS.length];
+    }
+
+    // Physics body — 더미 구슬은 mass를 0.7배로 설정
+    const bodyOptions: Matter.IBodyDefinition = this._isDummy
+      ? { ...options, mass: (options?.mass ?? 1) * 0.7 }
+      : { ...options };
+    this.body = PhysicsWorld.createBall(x, y, this.radius, bodyOptions);
 
     // PixiJS container
     this.container = new Container();
 
-    // Marble circle with gradient-like highlight
+    // Marble circle with pixel-art style
     this.bodyGfx = new Graphics();
     this.drawMarble();
     this.container.addChild(this.bodyGfx);
@@ -44,7 +69,7 @@ export class Marble {
       text: player.name,
       style: {
         fontFamily: FONT_BODY,
-        fontSize: 8,
+        fontSize: 10,
         fontWeight: '700',
         fill: this.color,
       },
@@ -70,6 +95,10 @@ export class Marble {
     return this._retired;
   }
 
+  get isDummy(): boolean {
+    return this._isDummy;
+  }
+
   /** Mark this marble as finished */
   markFinished(time: number): void {
     this._finished = true;
@@ -91,38 +120,39 @@ export class Marble {
     this.bodyGfx.rotation = this.body.angle;
   }
 
-  /** Clamp physics body within track bounds (call BEFORE physics step) */
-  clampToBounds(boundsMinX: number, boundsMaxX: number): void {
-    const pos = this.body.position;
-    if (pos.x < boundsMinX || pos.x > boundsMaxX) {
-      const clampedX = Math.max(boundsMinX, Math.min(boundsMaxX, pos.x));
-      Matter.Body.setPosition(this.body, { x: clampedX, y: pos.y });
-      const vel = this.body.velocity;
-      // 반전 계수 0.3: 벽 근처 반복 바운스 감쇠
-      Matter.Body.setVelocity(this.body, { x: -vel.x * 0.3, y: vel.y });
+  /** 벽 경계 클램프 (좌우 이탈 방지) */
+  clampToBounds(minX: number, maxX: number): void {
+    const x = this.body.position.x;
+    const r = this.radius;
+    if (x - r < minX) {
+      Matter.Body.setPosition(this.body, { x: minX + r, y: this.body.position.y });
+      Matter.Body.setVelocity(this.body, { x: Math.abs(this.body.velocity.x) * 0.5, y: this.body.velocity.y });
+    } else if (x + r > maxX) {
+      Matter.Body.setPosition(this.body, { x: maxX - r, y: this.body.position.y });
+      Matter.Body.setVelocity(this.body, { x: -Math.abs(this.body.velocity.x) * 0.5, y: this.body.velocity.y });
     }
   }
 
   private drawMarble(): void {
     const g = this.bodyGfx;
     const r = this.radius;
-    const dark = this.darken(this.color, 0.3);
+    const dark = this.darken(this.color, 0.4);
 
-    // Shadow circle (offset)
-    g.circle(1.5, 1.5, r);
+    // Shadow (offset rect — pixel-art style)
+    g.rect(-r + 2, -r + 2, r * 2, r * 2);
     g.fill({ color: 0x000000, alpha: 0.25 });
 
-    // Main circle
-    g.circle(0, 0, r);
+    // Main square (dot-style)
+    g.rect(-r, -r, r * 2, r * 2);
     g.fill({ color: this.color });
 
-    // Highlight (upper-left)
-    g.circle(-r * 0.3, -r * 0.3, r * 0.35);
-    g.fill({ color: 0xffffff, alpha: 0.45 });
+    // Top-left highlight (2px dot)
+    g.rect(-r + 2, -r + 2, 4, 4);
+    g.fill({ color: 0xffffff, alpha: 0.8 });
 
-    // Bottom-right dark accent
-    g.circle(r * 0.3, r * 0.3, r * 0.25);
-    g.fill({ color: dark, alpha: 0.5 });
+    // Bottom-right shadow dot
+    g.rect(r - 4, r - 4, 4, 4);
+    g.fill({ color: dark });
   }
 
   private darken(color: number, amount: number): number {
