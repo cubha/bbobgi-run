@@ -63,8 +63,6 @@ export class SpiralSegment extends BaseSegment {
           angle: tangentAngle,
           restitution: 0.3,
           friction: 0.01,
-          frictionStatic: 0,
-          chamfer: { radius: 1 },
           label: 'spiral-outer',
         },
         COLORS.blue,
@@ -86,8 +84,6 @@ export class SpiralSegment extends BaseSegment {
             angle: tangentAngle,
             restitution: 0.3,
             friction: 0.01,
-            frictionStatic: 0,
-            chamfer: { radius: 1 },
             label: 'spiral-inner',
           },
           COLORS.lavender,
@@ -106,6 +102,24 @@ export class SpiralSegment extends BaseSegment {
     }
 
     parent.addChild(this.container);
+
+    // 입/출구 포트 설정
+    const entryAngleRad = 0;
+    const exitAngleRad = totalAngle * dirSign;
+    const channelW = outerR - innerR;
+    const midR = (outerR + innerR) / 2;
+    this.setEntry(
+      this.originX + Math.cos(entryAngleRad) * midR,
+      this.originY + Math.sin(entryAngleRad) * midR * 0.3,
+      entryAngleRad + Math.PI / 2,
+      channelW,
+    );
+    this.setExit(
+      this.originX + Math.cos(exitAngleRad) * midR,
+      this.originY + Math.sin(exitAngleRad) * midR * 0.3 + totalDrop,
+      exitAngleRad + Math.PI / 2,
+      channelW,
+    );
 
     this.updateBounds(
       isFinite(minX) ? minX : this.originX - outerR,

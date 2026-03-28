@@ -1,7 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import type Matter from 'matter-js';
-import { PhysicsWorld } from '@core/PhysicsWorld';
-import { COLORS, FONT_DISPLAY } from '@utils/constants';
+import { PhysicsWorld, type Body } from '@core/PhysicsWorld';
+import { COLORS, FONT_DISPLAY, SECTION_COLORS } from '@utils/constants';
 import type { TrackLayout, TrackSegmentDef } from './types';
 import type { BaseSegment } from './segments/BaseSegment';
 import {
@@ -12,6 +11,13 @@ import {
   FunnelSegment,
   SplitterSegment,
   SpiralSegment,
+  ChannelRampSegment,
+  CurvedChannelSegment,
+  WheelLiftSegment,
+  TrampolineSegment,
+  WindmillSegment,
+  ShortcutGapSegment,
+  SeesawSegment,
 } from './segments';
 
 /**
@@ -21,8 +27,8 @@ import {
  */
 export class TrackBuilder {
   private readonly segments: BaseSegment[] = [];
-  private readonly wallBodies: Matter.Body[] = [];
-  private finishSensor: Matter.Body | null = null;
+  private readonly wallBodies: Body[] = [];
+  private finishSensor: Body | null = null;
   private readonly layout: TrackLayout;
   private readonly physics: PhysicsWorld;
   private readonly worldContainer: Container;
@@ -33,12 +39,13 @@ export class TrackBuilder {
     this.worldContainer = worldContainer;
   }
 
-  /** 전체 트랙 빌드: 배경 → 벽 → 세그먼트 → 피니시 */
+  /** 전체 트랙 빌드: 배경 → 벽 → 세그먼트 → 피니시 → 연결 검증 */
   build(): void {
     this.buildBackground();
     this.buildWalls();
     this.buildSegments();
     this.buildFinishLine();
+    this.validateConnections();
   }
 
   /** 빌드된 세그먼트 인스턴스 목록 반환 (culling용) */
@@ -47,7 +54,7 @@ export class TrackBuilder {
   }
 
   /** 피니시 센서 바디 반환 */
-  getFinishSensor(): Matter.Body | null {
+  getFinishSensor(): Body | null {
     return this.finishSensor;
   }
 
@@ -64,18 +71,42 @@ export class TrackBuilder {
   private buildBackground(): void {
     const { worldWidth, worldHeight } = this.layout;
 
-    // 월드 배경
+    // 전체 배경
     const bg = new Graphics();
     bg.rect(0, 0, worldWidth, worldHeight);
     bg.fill(COLORS.background);
     this.worldContainer.addChild(bg);
 
-    // 트랙 영역 배경 (약간 밝은 색)
-    const trackBg = new Graphics();
-    const margin = this.layout.wallThick;
-    trackBg.rect(margin, 0, worldWidth - margin * 2, worldHeight);
-    trackBg.fill({ color: 0x0d2020 });
-    this.worldContainer.addChild(trackBg);
+    // 섹션별 배경 밴드
+    // 체크포인트 기반 섹션 경계 동적 생성
+    const cps = this.layout.checkpoints ?? [];
+    const sectionYs = [0, ...cps.map(cp => cp.y), worldHeight];
+    // SECTION_COLORS 부족 시 마지막 색 반복
+    const safeColor = (i: number) => SECTION_COLORS[Math.min(i, SECTION_COLORS.length - 1)];
+    for (let i = 0; i < sectionYs.length - 1; i++) {
+      const y0 = sectionYs[i];
+      const y1 = sectionYs[i + 1] ?? worldHeight;
+      const band = new Graphics();
+      band.rect(0, y0, worldWidth, y1 - y0);
+      band.fill({ color: safeColor(i), alpha: 0.6 });
+      this.worldContainer.addChild(band);
+
+      // 섹션 경계선 (1px)
+      if (i > 0) {
+        const line = new Graphics();
+        line.rect(0, y0, worldWidth, 1);
+        line.fill({ color: 0x3a5a7a, alpha: 0.15 });
+        this.worldContainer.addChild(line);
+      }
+    }
+
+    // 격자 패턴 (4px 간격 수평선)
+    const grid = new Graphics();
+    for (let y = 0; y < worldHeight; y += 40) {
+      grid.rect(0, y, worldWidth, 1);
+    }
+    grid.fill({ color: 0x1a2a3a, alpha: 0.08 });
+    this.worldContainer.addChild(grid);
   }
 
   // ─── Walls ──────────────────────────────────
@@ -86,25 +117,21 @@ export class TrackBuilder {
     const wallCY = worldHeight / 2;
 
     // 좌벽
-    const leftWall = PhysicsWorld.createWall(wallThick / 2, wallCY, wallThick, wallH);
-    this.physics.addBodies(leftWall);
-    this.drawStaticBody(leftWall, 0x224422);
+    const leftWall = this.physics.createWall(wallThick / 2, wallCY, wallThick, wallH);
+    this.drawWallRect(wallThick / 2, wallCY, wallThick, wallH, 0x224422);
     this.wallBodies.push(leftWall);
 
     // 우벽
-    const rightWall = PhysicsWorld.createWall(worldWidth - wallThick / 2, wallCY, wallThick, wallH);
-    this.physics.addBodies(rightWall);
-    this.drawStaticBody(rightWall, 0x224422);
+    const rightWall = this.physics.createWall(worldWidth - wallThick / 2, wallCY, wallThick, wallH);
+    this.drawWallRect(worldWidth - wallThick / 2, wallCY, wallThick, wallH, 0x224422);
     this.wallBodies.push(rightWall);
 
     // 천장 (구슬 역주행 방지)
-    const ceiling = PhysicsWorld.createWall(worldWidth / 2, -wallThick / 2, worldWidth, wallThick);
-    this.physics.addBodies(ceiling);
+    const ceiling = this.physics.createWall(worldWidth / 2, -wallThick / 2, worldWidth, wallThick);
     this.wallBodies.push(ceiling);
 
     // 바닥 (구슬 낙하 방지)
-    const floor = PhysicsWorld.createWall(worldWidth / 2, worldHeight + wallThick / 2, worldWidth, wallThick);
-    this.physics.addBodies(floor);
+    const floor = this.physics.createWall(worldWidth / 2, worldHeight + wallThick / 2, worldWidth, wallThick);
     this.wallBodies.push(floor);
   }
 
@@ -128,6 +155,13 @@ export class TrackBuilder {
       case 'funnel': return new FunnelSegment(def);
       case 'splitter': return new SplitterSegment(def);
       case 'spiral': return new SpiralSegment(def);
+      case 'channel': return new ChannelRampSegment(def);
+      case 'curved': return new CurvedChannelSegment(def);
+      case 'wheelLift': return new WheelLiftSegment(def);
+      case 'trampoline': return new TrampolineSegment(def);
+      case 'windmill': return new WindmillSegment(def);
+      case 'shortcutGap': return new ShortcutGapSegment(def);
+      case 'seesaw': return new SeesawSegment(def);
       default: return null;
     }
   }
@@ -169,20 +203,56 @@ export class TrackBuilder {
     this.worldContainer.addChild(label);
 
     // 피니시 센서
-    this.finishSensor = PhysicsWorld.createSensor(cx, finishY, trackW, 10, 'finish');
-    this.physics.addBodies(this.finishSensor);
+    this.finishSensor = this.physics.createSensor(cx, finishY, trackW, 10, 'finish');
   }
 
   // ─── Helpers ────────────────────────────────
 
-  private drawStaticBody(body: Matter.Body, color: number): void {
-    const verts = body.vertices;
+  private drawWallRect(x: number, y: number, w: number, h: number, color: number): void {
     const g = new Graphics();
-    g.moveTo(verts[0].x, verts[0].y);
-    for (let i = 1; i < verts.length; i++) g.lineTo(verts[i].x, verts[i].y);
-    g.closePath();
+    g.rect(-w / 2, -h / 2, w, h);
     g.fill({ color, alpha: 0.9 });
+    g.position.set(x, y);
     this.worldContainer.addChild(g);
+  }
+
+  // ─── Connection Validation ─────────────────
+
+  /** 인접 세그먼트 exit↔entry 거리 검증 — 주요 경로 세그먼트만 검사 */
+  private validateConnections(): void {
+    // 연결 검증 대상: 경로를 형성하는 세그먼트 타입만
+    const flowTypes = new Set(['funnel', 'channel', 'curved', 'wheelLift', 'spiral']);
+    const flowSegments = this.segments.filter(s => flowTypes.has(s.type));
+
+    if (flowSegments.length < 2) return;
+
+    const WARN_THRESHOLD = 50;
+    const issues: string[] = [];
+
+    for (let i = 0; i < flowSegments.length - 1; i++) {
+      const prev = flowSegments[i];
+      const next = flowSegments[i + 1];
+      const exit = prev.getExit();
+      const entry = next.getEntry();
+
+      const dx = exit.x - entry.x;
+      const dy = exit.y - entry.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > WARN_THRESHOLD) {
+        issues.push(
+          `[TrackBuilder] 연결 오차 ${dist.toFixed(0)}px: ` +
+          `${prev.id}.exit(${exit.x.toFixed(0)},${exit.y.toFixed(0)}) → ` +
+          `${next.id}.entry(${entry.x.toFixed(0)},${entry.y.toFixed(0)})`,
+        );
+      }
+    }
+
+    for (const msg of issues) console.warn(msg);
+
+    if (issues.length > 0) {
+      console.warn(`[TrackBuilder] 연결 검증: ${issues.length}건 오차 발견 (허용: ${WARN_THRESHOLD}px)`);
+    }
   }
 
   /** 모든 세그먼트 + 벽 정리 */

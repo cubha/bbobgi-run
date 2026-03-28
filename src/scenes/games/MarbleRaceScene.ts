@@ -1,11 +1,11 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import Matter from 'matter-js';
 import { BaseScene } from '@core/BaseScene';
-import { PhysicsWorld } from '@core/PhysicsWorld';
+import { PhysicsWorld, Vec2, type Body, type Contact } from '@core/PhysicsWorld';
 import { CameraController } from '@core/CameraController';
 import { Marble, resetDummyColorIndex } from '@entities/Marble';
 import { TrackBuilder } from '@maps/TrackBuilder';
-import { TRACK_V2, MARBLE_RADIUS_V2, MIN_MARBLES, DUMMY_SYMBOLS } from '@maps/TrackData';
+import { MarbleProgress } from '@maps/MarbleProgress';
+import { TRACK_V3, MARBLE_RADIUS_V3, MIN_MARBLES, DUMMY_SYMBOLS } from '@maps/TrackData';
 import { CountdownEffect } from '@effects/CountdownEffect';
 import { SlowMotionEffect } from '@effects/SlowMotionEffect';
 import { ShakeEffect } from '@effects/ShakeEffect';
@@ -19,23 +19,24 @@ import {
   COUNTDOWN_SEC,
   CHAOS_SEC,
   TENSION_SEC,
-  SLOWMO_SEC,
-  GAME_DURATION_SEC,
   FONT_DISPLAY,
 } from '@utils/constants';
 import type { ScaleInfo } from '@utils/responsive';
 
 type RacePhase = 'countdown' | 'racing' | 'chaos' | 'tension' | 'slowmo' | 'done';
 
-/** Stuck marble detection thresholds */
+/** Stuck marble detection thresholds (Planck.js 픽셀 스케일) */
 const STUCK = {
-  speedThreshold: 0.6,   // V2 대형 맵: 속도 임계 낮춰 빠른 감지
-  time1: 1.5,            // Level 1: 빠른 부드러운 힘
-  time2: 3.0,            // Level 2: 강한 속도 리셋
-  time3: 4.5,            // Level 3: 텔레포트
-  retire: 7.0,           // Level 4: 리타이어 (8→7: 대형 맵 끼임 장기화 방지)
-  wallFastTime: 0.8,     // 벽 근처 빠른 구제 (1.0→0.8)
+  speedThreshold: 60,
+  time1: 1.5,
+  time2: 3.0,
+  time3: 4.5,
+  retire: 7.0,
+  wallFastTime: 0.8,
 } as const;
+
+/** 구슬 최대 속도 (px/s — Planck.js 스케일) */
+const MAX_MARBLE_SPEED = 1800;
 
 /** Pre-chaos event triggers (seconds after racing phase starts) */
 const RACE_EVT = { lastBooster: 8, leadLightning: 16 } as const;
@@ -43,7 +44,7 @@ const RACE_EVT = { lastBooster: 8, leadLightning: 16 } as const;
 const CHAOS_EVT = { lastBooster: 4, leadLightning: 7 } as const;
 
 /**
- * Marble Race game scene — V2 대형 맵 (1200×4000px)
+ * Marble Race game scene — V3 대형 맵 (2400×3200px)
  * 모듈러 세그먼트 + CameraController + 더미 구슬 시스템
  */
 export class MarbleRaceScene extends BaseScene {
@@ -53,6 +54,7 @@ export class MarbleRaceScene extends BaseScene {
 
   private physics: PhysicsWorld | null = null;
   private trackBuilder: TrackBuilder | null = null;
+  private marbleProgress: MarbleProgress | null = null;
   private camera: CameraController | null = null;
   private marbles: Marble[] = [];
   private finishOrder: Marble[] = [];
@@ -64,7 +66,6 @@ export class MarbleRaceScene extends BaseScene {
   private readonly shaker = new ShakeEffect();
   private chaos: ChaosEffect | null = null;
 
-  // 컨테이너 구조: container > worldContainer (카메라 이동) + hudContainer (고정)
   private readonly worldContainer = new Container();
   private readonly marbleContainer = new Container();
   private readonly hudContainer = new Container();
@@ -74,7 +75,7 @@ export class MarbleRaceScene extends BaseScene {
   private phaseLabel: Text | null = null;
   private miniMap: MiniMap | null = null;
   private chaosApplied = false;
-  private chaosObstacles: Matter.Body[] = [];
+  private chaosObstacles: Body[] = [];
   private prevRankIds: number[] = [];
 
   // ─── Event system ─────────────────────────────
@@ -92,6 +93,8 @@ export class MarbleRaceScene extends BaseScene {
 
   // ─── Stuck detection ──────────────────────────
   private readonly stuckTimers = new Map<Marble, number>();
+  /** 위치 변위 기반 stuck 감지: 10초 전 위치 기록 */
+  private readonly stuckPositions = new Map<Marble, { x: number; y: number; time: number }>();
 
   // ─── Timer cleanup ────────────────────────────
   private readonly pendingTimers: ReturnType<typeof setTimeout>[] = [];
@@ -105,35 +108,49 @@ export class MarbleRaceScene extends BaseScene {
   async init(): Promise<void> {
     if (!this.config) return;
 
-    this.physics = new PhysicsWorld({ x: 0, y: 0.6 });
+    this.physics = new PhysicsWorld({ x: 0, y: 980 });
 
-    // 컨테이너 구조 설정
     this.container.addChild(this.worldContainer);
-    this.worldContainer.addChild(this.marbleContainer);
     this.container.addChild(this.hudContainer);
 
-    // TrackBuilder로 트랙 빌드
-    this.trackBuilder = new TrackBuilder(TRACK_V2, this.physics, this.worldContainer);
+    // 인터랙션 레이어 (드래그용 — hudContainer 위에)
+    const interactionLayer = new Container();
+    this.container.addChild(interactionLayer);
+
+    this.trackBuilder = new TrackBuilder(TRACK_V3, this.physics, this.worldContainer);
     this.trackBuilder.build();
 
-    // CameraController 설정
+    this.worldContainer.addChild(this.marbleContainer);
+
+    // 캔버스 참조 (줌용)
+    const canvas = this.container.parent?.children
+      ? (document.querySelector('canvas') as HTMLCanvasElement | null)
+      : null;
+
     this.camera = new CameraController(
       this.worldContainer,
       DESIGN_WIDTH,
       DESIGN_HEIGHT,
-      TRACK_V2.worldWidth,
-      TRACK_V2.worldHeight,
+      TRACK_V3.worldWidth,
+      TRACK_V3.worldHeight,
     );
-    this.camera.setupDrag(this.hudContainer, () => this._scaleInfo?.scale ?? 1);
+    this.camera.setupDrag(interactionLayer, () => this._scaleInfo?.scale ?? 1, canvas ?? undefined);
+    this.camera.setPosition(TRACK_V3.worldWidth / 2, TRACK_V3.startY + DESIGN_HEIGHT / 2 - 100);
 
     this.buildMarbles();
+
+    this.marbleProgress = new MarbleProgress(TRACK_V3, this.physics);
+    this.marbleProgress.registerMarbles(this.marbles);
+    this.marbleProgress.buildSensors();
+
     this.buildHUD();
     this.buildRankLabels();
     this.setupCollisionDetection();
 
-    // 미니맵 (hudContainer에 추가 — 화면 고정)
-    this.miniMap = new MiniMap(this.hudContainer, TRACK_V2.worldWidth, TRACK_V2.worldHeight);
+    this.miniMap = new MiniMap(this.hudContainer, TRACK_V3.worldWidth, TRACK_V3.worldHeight);
 
+    // 초기 culling (모든 세그먼트 가시 설정)
+    this.cullSegments();
     this.startCountdown();
   }
 
@@ -143,17 +160,26 @@ export class MarbleRaceScene extends BaseScene {
     const dt = delta / 60;
     this.totalElapsed += dt;
 
-    if (this.phase === 'countdown') return;
+    if (this.phase === 'countdown') {
+      this.camera?.update();
+      this.cullSegments();
+      return;
+    }
 
-    // Phase transitions
-    if (this.totalElapsed >= GAME_DURATION_SEC) {
+    // Phase transitions — 시간제한 없음, 완주 기반 종료
+    const playerCount = this.config!.players.filter(p => !p.isDummy).length;
+
+    // 전원 완주+retire 감지 (안전장치: 모든 구슬 처리 완료 시 종료)
+    const allSettled = this.marbles.every(m => m.finished || m.retired);
+    if (allSettled && this.marbles.length > 0) {
       this.endRace();
       return;
     }
-    const playerCount = this.config!.players.filter(p => !p.isDummy).length;
+
+    // 꼴등뽑기: N-1명 완주 시 슬로모 진입
     const lastPickSlowmo = this.config!.pickMode === 'last'
       && this.uniqueFinishedPlayerCount() >= playerCount - 1;
-    if (this.phase !== 'slowmo' && (this.totalElapsed >= SLOWMO_SEC || lastPickSlowmo)) {
+    if (this.phase !== 'slowmo' && lastPickSlowmo) {
       this.enterSlowmo();
     } else if (this.phase === 'chaos' && this.totalElapsed >= TENSION_SEC) {
       this.phase = 'tension';
@@ -163,19 +189,25 @@ export class MarbleRaceScene extends BaseScene {
       this.applyChaos();
     }
 
-    // Event scheduler
     this.tickEvents();
 
-    // 1. Pre-physics: 벽 클램핑
+    // 1. Pre-physics: 속도 상한 + 벽 클램핑
     const bounds = this.trackBuilder!.getTrackBounds();
-    const marbleR = MARBLE_RADIUS_V2;
+    const marbleR = MARBLE_RADIUS_V3;
     const boundsMinX = bounds.minX + marbleR + 2;
     const boundsMaxX = bounds.maxX - marbleR - 2;
     for (const marble of this.marbles) {
-      if (!marble.retired) marble.clampToBounds(boundsMinX, boundsMaxX);
+      if (marble.retired) continue;
+      const vel = marble.body.getLinearVelocity();
+      const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+      if (speed > MAX_MARBLE_SPEED) {
+        const scale = MAX_MARBLE_SPEED / speed;
+        marble.body.setLinearVelocity(new Vec2(vel.x * scale, vel.y * scale));
+      }
+      marble.clampToBounds(boundsMinX, boundsMaxX);
     }
 
-    // 2. Physics step — slowmo는 프레임 스킵 방식 (Issue #303 회피)
+    // 2. Physics step — slowmo는 프레임 스킵 방식
     if (this.phase === 'slowmo') {
       this.slowmoFrameCounter++;
       if (this.slowmoFrameCounter % 3 === 0) {
@@ -190,55 +222,55 @@ export class MarbleRaceScene extends BaseScene {
       if (marble.retired) continue;
       marble.sync();
 
-      const pos = marble.body.position;
-      if (pos.y < -100 || pos.y > TRACK_V2.worldHeight + 100) {
+      const pos = marble.body.getPosition();
+      if (pos.y < -100 || pos.y > TRACK_V3.worldHeight + 100) {
         marble.markRetired();
       }
     }
 
-    // Stuck marble detection & rescue
     this.checkStuckMarbles(dt);
 
-    // Camera — 상위 구슬 위치로 추적
     this.updateCameraTracking();
     this.camera!.update();
 
-    // Culling
     this.cullSegments();
 
-    // 미니맵 업데이트
     if (this.miniMap && this.camera) {
       const marbleInfos = this.marbles
         .filter(m => !m.retired)
-        .map(m => ({
-          x: m.body.position.x,
-          y: m.body.position.y,
-          color: m.color,
-          isDummy: m.isDummy,
-        }));
-      this.miniMap.update(marbleInfos, this.camera.getViewBounds(), TRACK_V2.finishY);
+        .map(m => {
+          const p = m.body.getPosition();
+          return { x: p.x, y: p.y, color: m.color, isDummy: m.isDummy };
+        });
+      this.miniMap.update(marbleInfos, this.camera.getViewBounds(), TRACK_V3.finishY);
     }
 
-    // Fade flash overlays
     this.tickFlashes();
 
-    // Timer bar
-    const raceElapsed = this.totalElapsed - COUNTDOWN_SEC;
-    const raceTotal = GAME_DURATION_SEC - COUNTDOWN_SEC;
-    const progress = Math.max(0, Math.min(1, 1 - raceElapsed / raceTotal));
+    // 타이머 바: 완주 진행도 기반 (실제 플레이어 완주 비율)
+    const finishedOrRetired = this.marbles.filter(m => !m.isDummy && (m.finished || m.retired)).length;
+    const totalReal = this.marbles.filter(m => !m.isDummy).length;
+    const progress = totalReal > 0 ? Math.max(0, 1 - finishedOrRetired / totalReal) : 1;
     this.updateTimerBar(progress);
 
-    // Rankings
     const sorted = this.getSortedByProgress();
     this.checkRankChanges(sorted);
     this.prevRankIds = sorted.map((m) => m.player.id);
     this.updateRankLabels(sorted);
 
-    // 종료 조건: 꼴등뽑기 N-1명, 그 외 전원 완주
+    // 완주 기반 종료: 1등뽑기 = 1명 완주 시, 꼴등뽑기 = N-1명 완주 시 (꼴등만 남김)
     const endThreshold = this.config!.pickMode === 'last'
       ? playerCount - 1
-      : playerCount;
-    if (this.uniqueFinishedPlayerCount() >= endThreshold) this.endRace();
+      : 1;
+    if (this.uniqueFinishedPlayerCount() >= endThreshold) {
+      // 1등뽑기: 1등 결정 즉시 → 슬로모 → 잠시 후 종료
+      // 꼴등뽑기: N-1명 완주 → 슬로모 → 꼴등 결정 후 종료
+      if (this.phase !== 'slowmo') {
+        this.enterSlowmo();
+        // 슬로모 5초 후 종료 (나머지 구슬 도착 대기)
+        this.pendingTimers.push(setTimeout(() => this.endRace(), 5000));
+      }
+    }
   }
 
   override destroy(): void {
@@ -249,8 +281,8 @@ export class MarbleRaceScene extends BaseScene {
     for (const t of this.pendingTimers) clearTimeout(t);
     this.pendingTimers.length = 0;
     this.stuckTimers.clear();
+    this.stuckPositions.clear();
 
-    // Marble 바디 제거 + PixiJS 파괴
     for (const marble of this.marbles) {
       if (this.physics) this.physics.removeBodies(marble.body);
       marble.destroy();
@@ -262,6 +294,8 @@ export class MarbleRaceScene extends BaseScene {
     this.countdown?.destroy();
     this.slowMo?.destroy();
     this.chaos?.destroy();
+    this.marbleProgress?.destroy();
+    this.marbleProgress = null;
     this.trackBuilder?.destroy();
     this.trackBuilder = null;
     this.physics?.destroy();
@@ -277,13 +311,24 @@ export class MarbleRaceScene extends BaseScene {
     resetDummyColorIndex();
 
     const { players } = this.config;
-    const realPlayers = players.filter(p => !p.isDummy);
-    const allPlayers = this.ensureMinMarbles(realPlayers);
+    const marbleCount = this.config.marbleCount ?? 1;
 
-    const cx = TRACK_V2.worldWidth / 2;
-    const startY = TRACK_V2.startY;
+    const expandedPlayers: Player[] = [];
+    for (const player of players) {
+      for (let n = 0; n < marbleCount; n++) {
+        expandedPlayers.push({
+          ...player,
+          name: marbleCount > 1 ? `${player.name}${n + 1}` : player.name,
+        });
+      }
+    }
+
+    const allPlayers = this.ensureMinMarbles(expandedPlayers);
+
+    const cx = TRACK_V3.worldWidth / 2;
+    const startY = TRACK_V3.startY;
     const totalMarbles = allPlayers.length;
-    const spacing = Math.min(24, (TRACK_V2.worldWidth * 0.4) / totalMarbles);
+    const spacing = Math.min(24, (TRACK_V3.worldWidth * 0.4) / totalMarbles);
 
     allPlayers.forEach((player, idx) => {
       const offset = (idx - (totalMarbles - 1) / 2) * spacing;
@@ -291,9 +336,9 @@ export class MarbleRaceScene extends BaseScene {
         player,
         cx + offset,
         startY + 10,
-        MARBLE_RADIUS_V2,
+        MARBLE_RADIUS_V3,
+        this.physics!,
       );
-      this.physics!.addBodies(marble.body);
       this.marbles.push(marble);
       this.marbleContainer.addChild(marble.container);
     });
@@ -301,7 +346,6 @@ export class MarbleRaceScene extends BaseScene {
     this.prevRankIds = allPlayers.map((p) => p.id);
   }
 
-  /** 최소 구슬 수 보장 — 부족하면 더미 구슬 추가 */
   private ensureMinMarbles(players: Player[]): Player[] {
     if (players.length >= MIN_MARBLES) return [...players];
 
@@ -371,18 +415,28 @@ export class MarbleRaceScene extends BaseScene {
   private setupCollisionDetection(): void {
     if (!this.physics) return;
 
-    this.physics.onCollisionStart((event) => {
-      for (const pair of event.pairs) {
-        const bodies = [pair.bodyA, pair.bodyB];
-        const sensor = bodies.find((b) => b.label === 'finish');
-        const marbleBody = bodies.find((b) => b !== sensor && !b.isStatic);
+    this.physics.onCollisionStart((contact: Contact) => {
+      // 체크포인트 센서 처리
+      this.marbleProgress?.handleContact(contact, this.marbles);
 
-        if (sensor && marbleBody) {
-          const marble = this.marbles.find((m) => m.body === marbleBody);
-          if (marble && !marble.finished) {
-            marble.markFinished(this.totalElapsed);
-            this.finishOrder.push(marble);
-          }
+      const fixtureA = contact.getFixtureA();
+      const fixtureB = contact.getFixtureB();
+      const bodyA = fixtureA.getBody();
+      const bodyB = fixtureB.getBody();
+
+      const labelA = (bodyA.getUserData() as { label?: string } | null)?.label ?? '';
+      const labelB = (bodyB.getUserData() as { label?: string } | null)?.label ?? '';
+
+      const isFinishA = labelA === 'finish';
+      const isFinishB = labelB === 'finish';
+      const sensorBody = isFinishA ? bodyA : isFinishB ? bodyB : null;
+      const marbleBody = sensorBody ? (sensorBody === bodyA ? bodyB : bodyA) : null;
+
+      if (sensorBody && marbleBody && !marbleBody.isStatic()) {
+        const marble = this.marbles.find((m) => m.body === marbleBody);
+        if (marble && !marble.finished) {
+          marble.markFinished(this.totalElapsed);
+          this.finishOrder.push(marble);
         }
       }
     });
@@ -393,27 +447,29 @@ export class MarbleRaceScene extends BaseScene {
   private updateCameraTracking(): void {
     if (!this.camera) return;
 
-    // 슬로모/종료: 선두(또는 남은 유일한) 구슬 단독 추적
     if (this.phase === 'slowmo' || this.phase === 'done') {
       const sorted = this.getSortedByProgress().filter(m => !m.retired);
       const leader = sorted[0];
-      if (leader) this.camera.followLeader(leader.body.position.x, leader.body.position.y);
+      if (leader) {
+        const p = leader.body.getPosition();
+        this.camera.followLeader(p.x, p.y);
+      }
       return;
     }
 
     const active = this.marbles.filter((m) => !m.finished && !m.retired);
 
     if (active.length > 0) {
-      // 진행도 상위 3개 구슬 위치로 그룹 추적
-      const sorted = active.sort((a, b) => b.body.position.y - a.body.position.y);
-      const top = sorted.slice(0, 3).map(m => ({
-        x: m.body.position.x,
-        y: m.body.position.y,
-      }));
+      const sorted = active.sort((a, b) => b.body.getPosition().y - a.body.getPosition().y);
+      const top = sorted.slice(0, 3).map(m => {
+        const p = m.body.getPosition();
+        return { x: p.x, y: p.y };
+      });
       this.camera.followGroup(top);
     } else if (this.finishOrder.length > 0) {
       const last = this.finishOrder[this.finishOrder.length - 1];
-      this.camera.followLeader(last.body.position.x, last.body.position.y);
+      const p = last.body.getPosition();
+      this.camera.followLeader(p.x, p.y);
     }
   }
 
@@ -480,53 +536,57 @@ export class MarbleRaceScene extends BaseScene {
     }
   }
 
-  /** 꼴찌 구슬에 속도 부스터 적용 (더미 제외) */
   private fireLastBooster(): void {
     const sorted = this.getSortedByProgress().filter(m => !m.isDummy);
     const last = sorted[sorted.length - 1];
     if (!last) return;
 
-    const vel = last.body.velocity;
-    Matter.Body.setVelocity(last.body, { x: vel.x * 1.1, y: vel.y + 1.5 });
+    const vel = last.body.getLinearVelocity();
+    last.body.setLinearVelocity(new Vec2(vel.x * 1.1, vel.y + 150));
 
-    this.spawnWorldFlash(last.body.position.x, last.body.position.y, COLORS.brightGreen, 20);
+    const pos = last.body.getPosition();
+    this.spawnWorldFlash(pos.x, pos.y, COLORS.brightGreen, 20);
     this.setPhaseLabel('🚀 꼴찌 부스터!');
     this.pendingTimers.push(setTimeout(() => { if (this.phase !== 'done') this.setPhaseLabel(''); }, 1500));
     this.shaker.shake(this.worldContainer, 2, 3);
   }
 
-  /** 선두 구슬에 상방 충격량 적용 (더미 제외) */
   private fireLeadLightning(): void {
     const sorted = this.getSortedByProgress().filter(m => !m.isDummy);
     const leader = sorted[0];
     if (!leader) return;
 
-    Matter.Body.applyForce(leader.body, leader.body.position, { x: (Math.random() - 0.5) * 0.02, y: -0.01 });
+    const pos = leader.body.getPosition();
+    leader.body.applyForce(
+      new Vec2((Math.random() - 0.5) * 2, -1),
+      pos,
+      true,
+    );
 
-    this.spawnWorldFlash(leader.body.position.x, leader.body.position.y - 20, COLORS.gold, 20);
+    this.spawnWorldFlash(pos.x, pos.y - 20, COLORS.gold, 20);
     this.setPhaseLabel('⚡ 선두 낙뢰!');
     this.pendingTimers.push(setTimeout(() => { if (this.phase !== 'done') this.setPhaseLabel(''); }, 1500));
     this.shaker.shake(this.worldContainer, 4, 5);
   }
 
-  /** 화면 중심에서 방사형 힘 + 플래시 */
   private fireExplosion(): void {
     if (!this.camera) return;
     const center = this.camera.getCenter();
 
     for (const marble of this.marbles) {
       if (marble.finished) continue;
-      const dx = marble.body.position.x - center.x;
-      const dy = marble.body.position.y - center.y;
+      const pos = marble.body.getPosition();
+      const dx = pos.x - center.x;
+      const dy = pos.y - center.y;
       const dist = Math.max(10, Math.sqrt(dx * dx + dy * dy));
-      const force = Math.min(0.05, 0.12 / dist);
-      Matter.Body.applyForce(marble.body, marble.body.position, {
-        x: dx * force,
-        y: dy * force,
-      });
+      const force = Math.min(5, 12 / dist);
+      marble.body.applyForce(
+        new Vec2(dx * force, dy * force),
+        pos,
+        true,
+      );
     }
 
-    // Screen-space flash overlay
     const flash = new Graphics();
     flash.rect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
     flash.fill({ color: COLORS.primary, alpha: 0.35 });
@@ -536,7 +596,6 @@ export class MarbleRaceScene extends BaseScene {
     this.shaker.shake(this.container, 8, 8);
   }
 
-  /** Dot flash at a world-space position (scrolls with track) */
   private spawnWorldFlash(x: number, y: number, color: number, frames: number): void {
     const g = new Graphics();
     g.circle(0, 0, 16);
@@ -584,12 +643,11 @@ export class MarbleRaceScene extends BaseScene {
     this.chaos.play(this.hudContainer, 25);
     this.shaker.shake(this.worldContainer, 5, 6);
 
-    // 카오스 이벤트: 50% 횡풍 OR 50% 폭발+장애물
     if (Math.random() < 0.5) {
       const dir = Math.random() < 0.5 ? 1 : -1;
-      this.physics.setGravity(dir * 0.3, 0.6);
+      this.physics.setGravity(dir * 300, 980);
       this.pendingTimers.push(setTimeout(() => {
-        if (this.physics && this.phase !== 'done') this.physics.setGravity(0, 0.6);
+        if (this.physics && this.phase !== 'done') this.physics.setGravity(0, 980);
       }, 600));
     } else {
       this.fireExplosion();
@@ -603,11 +661,10 @@ export class MarbleRaceScene extends BaseScene {
       ];
 
       for (const pos of obstPositions) {
-        const body = PhysicsWorld.createWall(pos.x, pos.y, 100, 12, {
+        const body = this.physics.createWall(pos.x, pos.y, 100, 12, {
           angle: pos.angle,
           restitution: 0.8,
         });
-        this.physics.addBodies(body);
         this.chaosObstacles.push(body);
 
         const g = new Graphics();
@@ -623,7 +680,7 @@ export class MarbleRaceScene extends BaseScene {
 
   private removeChaosObstacles(): void {
     if (!this.physics) return;
-    this.physics.setGravity(0, 0.6);
+    this.physics.setGravity(0, 980);
 
     for (const body of this.chaosObstacles) this.physics.removeBodies(body);
     this.chaosObstacles = [];
@@ -645,7 +702,6 @@ export class MarbleRaceScene extends BaseScene {
     this.slowMo.activate(0.4);
     this.shaker.shake(this.container, 7, 10);
 
-    // 슬로모 진입 시 리더 추적으로 전환
     if (this.camera) this.camera.resumeAutoTracking();
   }
 
@@ -666,13 +722,15 @@ export class MarbleRaceScene extends BaseScene {
 
   // ─── Runtime helpers ─────────────────────────
 
-  /** 진행도 정렬 (더미 포함, finished 우선) */
   private getSortedByProgress(): Marble[] {
+    if (this.marbleProgress) {
+      return this.marbleProgress.getSortedByProgress(this.marbles);
+    }
     return [...this.marbles].sort((a, b) => {
       if (a.finished && b.finished) return a.finishTime - b.finishTime;
       if (a.finished) return -1;
       if (b.finished) return 1;
-      return b.body.position.y - a.body.position.y;
+      return b.body.getPosition().y - a.body.getPosition().y;
     });
   }
 
@@ -690,8 +748,8 @@ export class MarbleRaceScene extends BaseScene {
   }
 
   private updateRankLabels(sorted: Marble[]): void {
-    // 더미가 아닌 구슬만 순위 표시, 더미 포함 전체 인덱스 유지
     let realRank = 0;
+    let leaderId = -1;
     for (const marble of sorted) {
       const idx = this.marbles.indexOf(marble);
       const label = this.rankLabels[idx];
@@ -699,17 +757,26 @@ export class MarbleRaceScene extends BaseScene {
 
       if (marble.isDummy) {
         label.visible = false;
+        marble.setLeader(false);
       } else {
         realRank++;
         label.text = `${realRank}위`;
         label.x = marble.container.x;
         label.y = marble.container.y - marble.radius - 4;
         label.visible = !marble.retired;
+
+        // 1등 구슬 글로우
+        if (realRank === 1 && !marble.retired) {
+          leaderId = idx;
+          marble.setLeader(true);
+        } else {
+          marble.setLeader(false);
+        }
       }
     }
+    void leaderId;
   }
 
-  /** 완주한 고유 플레이어 수 (더미 제외, marbleCount > 1 중복 제거) */
   private uniqueFinishedPlayerCount(): number {
     return new Set(
       this.finishOrder
@@ -718,16 +785,13 @@ export class MarbleRaceScene extends BaseScene {
     ).size;
   }
 
-  /**
-   * 끼임 구슬 감지 및 단계별 해소.
-   */
   private checkStuckMarbles(dt: number): void {
     if (this.phase === 'countdown' || this.phase === 'done') return;
 
     const bounds = this.trackBuilder!.getTrackBounds();
     const minX = bounds.minX + 10;
     const maxX = bounds.maxX - 10;
-    const cx = TRACK_V2.worldWidth / 2;
+    const cx = TRACK_V3.worldWidth / 2;
     const wallZone = 30;
 
     for (const marble of this.marbles) {
@@ -736,21 +800,52 @@ export class MarbleRaceScene extends BaseScene {
         continue;
       }
 
-      const vel = marble.body.velocity;
+      const vel = marble.body.getLinearVelocity();
       const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
 
+      const pos = marble.body.getPosition();
+
+      // ── 위치 변위 기반 stuck 감지 (속도 무관) ──
+      const prevPos = this.stuckPositions.get(marble);
+      if (!prevPos) {
+        this.stuckPositions.set(marble, { x: pos.x, y: pos.y, time: this.totalElapsed });
+      } else {
+        const elapsed = this.totalElapsed - prevPos.time;
+        if (elapsed >= 8) {
+          const dx = pos.x - prevPos.x;
+          const dy = pos.y - prevPos.y;
+          const displacement = Math.sqrt(dx * dx + dy * dy);
+          if (displacement < 100) {
+            // 8초간 100px 미만 이동 → 전진 리포지션
+            const cpIdx = this.marbleProgress?.getCpIndex(marble) ?? -1;
+            const cps = TRACK_V3.checkpoints ?? [];
+            const nextCp = cps[cpIdx + 1];
+            let newX: number, newY: number;
+            if (nextCp) {
+              newX = nextCp.x + (Math.random() - 0.5) * 60;
+              newY = nextCp.y - 30;
+            } else {
+              newX = cx + (Math.random() - 0.5) * 200;
+              newY = Math.min(TRACK_V3.finishY - 100, pos.y + 150);
+            }
+            marble.body.setPosition(new Vec2(newX, newY));
+            marble.body.setLinearVelocity(new Vec2((Math.random() - 0.5) * 200, 200));
+          }
+          this.stuckPositions.set(marble, { x: pos.x, y: pos.y, time: this.totalElapsed });
+        }
+      }
+
+      // ── 속도 기반 stuck 감지 (기존 로직) ──
       if (speed < STUCK.speedThreshold) {
         const prev = this.stuckTimers.get(marble) ?? 0;
         const next = prev + dt;
         this.stuckTimers.set(marble, next);
 
-        const pos = marble.body.position;
         const nearWall = pos.x < minX + wallZone || pos.x > maxX - wallZone;
 
-        // 벽 근처 빠른 구제
         if (nearWall && next >= STUCK.wallFastTime && prev < STUCK.wallFastTime) {
           const dir = pos.x < cx ? 1 : -1;
-          Matter.Body.setVelocity(marble.body, { x: dir * 3, y: 2 });
+          marble.body.setLinearVelocity(new Vec2(dir * 300, 200));
         }
 
         if (next >= STUCK.retire) {
@@ -758,33 +853,34 @@ export class MarbleRaceScene extends BaseScene {
           this.stuckTimers.delete(marble);
           continue;
         } else if (next >= STUCK.time3) {
-          // 분기 구간 인식: 좌/우 경로 중 현재 위치에 가까운 쪽으로 재배치
-          const inSplit1 = pos.y >= 640 && pos.y <= 1400;  // Zone 3: 1차 분기
-          const inSplit2 = pos.y >= 2880 && pos.y <= 3400; // Zone 6: 2차 분기
-          let newX: number;
-          if (inSplit1 || inSplit2) {
-            // 분기 구간: 현재 위치에서 가까운 경로 중심으로 재배치
-            newX = pos.x < cx ? cx - 200 : cx + 200;
-            newX += (Math.random() - 0.5) * 60;
+          // 리포지션: 다음 체크포인트 방향으로 전진
+          const cpIdx = this.marbleProgress?.getCpIndex(marble) ?? -1;
+          const cps = TRACK_V3.checkpoints ?? [];
+          const nextCp = cps[cpIdx + 1];
+          let newX: number, newY: number;
+          if (nextCp) {
+            newX = nextCp.x + (Math.random() - 0.5) * 80;
+            newY = nextCp.y - 40;
           } else {
             newX = cx + (Math.random() - 0.5) * 150;
+            newY = Math.min(TRACK_V3.finishY - 50, pos.y + 100);
           }
-          const newY = Math.max(TRACK_V2.startY, pos.y - 60);
-          Matter.Body.setPosition(marble.body, { x: newX, y: newY });
-          Matter.Body.setVelocity(marble.body, {
-            x: (Math.random() - 0.5) * 3,
-            y: 2.5,
-          });
+          marble.body.setPosition(new Vec2(newX, newY));
+          marble.body.setLinearVelocity(new Vec2(
+            (Math.random() - 0.5) * 300,
+            250,
+          ));
           this.stuckTimers.set(marble, 0);
         } else if (next >= STUCK.time2 && prev < STUCK.time2) {
           const dir = pos.x < cx ? 1 : -1;
-          Matter.Body.setVelocity(marble.body, { x: dir * 2.5, y: 3.5 });
+          marble.body.setLinearVelocity(new Vec2(dir * 250, 350));
         } else if (next >= STUCK.time1 && prev < STUCK.time1) {
           const dir = Math.random() < 0.5 ? 1 : -1;
-          Matter.Body.applyForce(marble.body, marble.body.position, {
-            x: dir * 0.005,
-            y: 0.008,
-          });
+          marble.body.applyForce(
+            new Vec2(dir * 0.5, 0.8),
+            pos,
+            true,
+          );
         }
       } else {
         this.stuckTimers.delete(marble);
@@ -792,9 +888,6 @@ export class MarbleRaceScene extends BaseScene {
     }
   }
 
-  /**
-   * 플레이어별 최고 결과로 중복 제거한 최종 랭킹 (더미 제외).
-   */
   private buildRankings(): RankingEntry[] {
     const sorted = this.getSortedByProgress().filter(m => !m.isDummy);
     const seen = new Set<number>();

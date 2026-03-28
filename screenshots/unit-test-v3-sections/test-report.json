@@ -1,0 +1,97 @@
+{
+  "testSuite": "Marble Race V3 — Section Test (No Time Limit)",
+  "timestamp": "2026-03-28T02:29:35.260Z",
+  "summary": {
+    "total": 5,
+    "pass": 0,
+    "fail": 0,
+    "warn": 5
+  },
+  "scenarios": [
+    {
+      "id": "S1-FULL",
+      "name": "4명 1등뽑기 — 전구간 완주 (시간제한 없음)",
+      "status": "WARN",
+      "detail": "완주 성공 (14s). 6개 프레임 캡처. 시간제한 없이 순수 물리 완주. | Warnings: 8건",
+      "duration": "21.0",
+      "screenshots": [
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S1-FULL-scan-0s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S1-FULL-scan-3s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S1-FULL-scan-6s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S1-FULL-scan-9s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S1-FULL-scan-12s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S1-FULL-result-final.png"
+      ],
+      "consoleErrors": [],
+      "failPoint": ""
+    },
+    {
+      "id": "S2-MIN",
+      "name": "2명 최소 인원 완주 (시간제한 없음)",
+      "status": "WARN",
+      "detail": "2명+4더미 완주 (14s). 1등 결정 즉시 종료. | Warnings: 8건",
+      "duration": "20.5",
+      "screenshots": [
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S2-MIN-scan-0s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S2-MIN-scan-3s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S2-MIN-scan-6s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S2-MIN-scan-9s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S2-MIN-scan-12s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S2-MIN-result-final.png"
+      ],
+      "consoleErrors": [],
+      "failPoint": ""
+    },
+    {
+      "id": "S3-MAX",
+      "name": "10명 최대 인원 병목 완주 (시간제한 없음)",
+      "status": "WARN",
+      "detail": "10명 완주 (14s). 병목 전 구간 통과. | Warnings: 8건",
+      "duration": "21.8",
+      "screenshots": [
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S3-MAX-scan-0s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S3-MAX-scan-3s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S3-MAX-scan-6s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S3-MAX-scan-9s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S3-MAX-scan-12s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S3-MAX-result-final.png"
+      ],
+      "consoleErrors": [],
+      "failPoint": ""
+    },
+    {
+      "id": "S4-LAST",
+      "name": "4명 꼴등뽑기 완주 (시간제한 없음)",
+      "status": "WARN",
+      "detail": "꼴등뽑기 완주 (14s). N-1명 완주 후 꼴등 결정. | Warnings: 8건",
+      "duration": "20.8",
+      "screenshots": [
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S4-LAST-scan-0s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S4-LAST-scan-3s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S4-LAST-scan-6s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S4-LAST-scan-9s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S4-LAST-scan-12s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S4-LAST-result-final.png"
+      ],
+      "consoleErrors": [],
+      "failPoint": ""
+    },
+    {
+      "id": "S5-ERR",
+      "name": "콘솔 에러 0건 검증 (시간제한 없음)",
+      "status": "WARN",
+      "detail": "콘솔 에러 0건. 완주: 성공 (14s). | Warnings: 8건",
+      "duration": "20.8",
+      "screenshots": [
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S5-ERR-scan-0s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S5-ERR-scan-3s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S5-ERR-scan-6s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S5-ERR-scan-9s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S5-ERR-scan-12s.png",
+        "D:\\workspace\\bbobgi-run\\screenshots\\unit-test-v3-sections\\S5-ERR-result-final.png"
+      ],
+      "consoleErrors": [],
+      "failPoint": ""
+    }
+  ]
+}

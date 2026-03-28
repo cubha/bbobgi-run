@@ -1,0 +1,59 @@
+{
+  "testSuite": "Marble Race V3 — 구간별 구조물 매칭 검증",
+  "timestamp": "2026-03-28T11:39:49.097Z",
+  "htmlSpec": "Marble Run V3 - Adventure Course Preview.html",
+  "summary": {
+    "total": 5,
+    "pass": 5,
+    "fail": 0,
+    "warn": 0
+  },
+  "scenarios": [
+    {
+      "id": "S-1",
+      "name": "구조물 매칭 검증 — 28개 세그먼트 ID/타입 일치",
+      "status": "PASS",
+      "detail": "✅ 세그먼트 총 수: 28/28\n✅ SEC1: Start Funnel — 1개 세그먼트 일치\n  ✅ s1-funnel (funnel)\n✅ SEC2: Right Traverse Channel — 2개 세그먼트 일치\n  ✅ s2-ch-right (channel)\n  ✅ s2-pin1 (pinzone)\n✅ SEC3: U-Turn + Left Return — 4개 세그먼트 일치\n  ✅ s3-uturn (curved)\n  ✅ s3-ch-left (channel)\n  ✅ s3-windmill-1 (windmill)\n  ✅ s3-windmill-2 (windmill)\n✅ SEC4: Waterwheel Lift — 3개 세그먼트 일치\n  ✅ s4-funnel-entry (funnel)\n  ✅ s4-wheellift (wheelLift)\n  ✅ s4-ch-exit (channel)\n✅ SEC5: Spiral Descent — 3개 세그먼트 일치\n  ✅ s5-spiral (spiral)\n  ✅ s5-ch-exit (channel)\n  ✅ s5-trampoline (trampoline)\n✅ SEC6: Obstacle Alley + Splitter — 11개 세그먼트 일치\n  ✅ s6-funnel-entry (funnel)\n  ✅ s6-ch-left (channel)\n  ✅ s6-windmill (windmill)\n  ✅ s6-seesaw (seesaw)\n  ✅ s6-ch-drop (channel)\n  ✅ s6-ch-right (channel)\n  ✅ s6-splitter (splitter)\n  ✅ s6-ch-fast (channel)\n  ✅ s6-pins-fast (pinzone)\n  ✅ s6-ch-safe (channel)\n  ✅ s6-merge (funnel)\n✅ SEC7: Final Sprint + Finish — 4개 세그먼트 일치\n  ✅ s7-ch-sprint (channel)\n  ✅ s7-windmill-gate (windmill)\n  ✅ s7-bottleneck (bottleneck)\n  ✅ s7-ch-finish (channel)\n✅ cp-s2 — 좌표 일치 (2050,520)\n✅ cp-s3 — 좌표 일치 (500,720)\n✅ cp-s4 — 좌표 일치 (1500,950)\n✅ cp-s5 — 좌표 일치 (1200,1650)\n✅ cp-s6 — 좌표 일치 (1000,2600)\n✅ finishY = 3080",
+      "failures": [],
+      "consoleErrors": []
+    },
+    {
+      "id": "S-2",
+      "name": "4명 체크포인트 순서 통과 + 완주",
+      "status": "PASS",
+      "detail": "✅ 전원 완주 (0명 완주, 0명 리타이어) — 13s\n✅ 체크포인트 순서 정상 (순차 통과)\n  ⚠ cp-s2: 통과 기록 없음 (구슬이 빠르게 통과했을 수 있음)\n  ⚠ cp-s3: 통과 기록 없음 (구슬이 빠르게 통과했을 수 있음)\n  ⚠ cp-s4: 통과 기록 없음 (구슬이 빠르게 통과했을 수 있음)\n  ⚠ cp-s5: 통과 기록 없음 (구슬이 빠르게 통과했을 수 있음)\n  ⚠ cp-s6: 통과 기록 없음 (구슬이 빠르게 통과했을 수 있음)\n✅ 콘솔 에러 0건",
+      "failures": [],
+      "checkpointLog": [],
+      "duration": 13,
+      "consoleErrors": []
+    },
+    {
+      "id": "S-3",
+      "name": "10명 전 구간 통과 + 완주",
+      "status": "PASS",
+      "detail": "✅ 10명 전원 처리 (0명 완주, 0명 리타이어) — 13s\n✅ 체크포인트 순서 정상\n  ⚠ cp-s2: 0명 통과\n  ⚠ cp-s3: 0명 통과\n  ⚠ cp-s4: 0명 통과\n  ⚠ cp-s5: 0명 통과\n  ⚠ cp-s6: 0명 통과\n✅ 콘솔 에러 0건",
+      "failures": [],
+      "checkpointLog": [],
+      "duration": 13,
+      "consoleErrors": []
+    },
+    {
+      "id": "S-4",
+      "name": "2명 전 구간 통과 + 완주 (꼴등뽑기)",
+      "status": "PASS",
+      "detail": "✅ 2명 전원 처리 (2명 완주) — 12s\n✅ 체크포인트 순서 정상\n✅ 더미 구슬: 4개 (2명이므로 4개 더미 보충)\n✅ 콘솔 에러 0건",
+      "failures": [],
+      "duration": 12,
+      "consoleErrors": []
+    },
+    {
+      "id": "S-5",
+      "name": "구간별 구슬 위치 추적 상세",
+      "status": "PASS",
+      "detail": "게임 완주 — 16s\n✅ 추적A: 전 구간 통과 (SEC1→SEC3→SEC5→FINISH)\n✅ 추적B: 전 구간 통과 (SEC1→SEC3→SEC4→FINISH)\n⚠ 추적C: 미통과 구간 SEC2,SEC4,SEC5,SEC6,SEC7 (폴링 간격으로 미감지 가능)\n⚠ 추적D: 미통과 구간 SEC3,SEC4,SEC5,SEC6,SEC7 (폴링 간격으로 미감지 가능)\n✅ 콘솔 에러 0건",
+      "failures": [],
+      "sectionLog": 7,
+      "consoleErrors": []
+    }
+  ]
+}

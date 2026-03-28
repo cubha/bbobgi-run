@@ -1,4 +1,5 @@
 import { Container, Graphics } from 'pixi.js';
+import { RGBSplitFilter } from 'pixi-filters/rgb-split';
 import { gsap } from 'gsap';
 import { SLOWMO_RATE, DESIGN_WIDTH, DESIGN_HEIGHT } from '@utils/constants';
 import { fullScreenRect, type ScaleInfo } from '@utils/responsive';
@@ -8,6 +9,7 @@ export class SlowMotionEffect {
   private vignette: Graphics | null = null;
   private tween: gsap.core.Tween | null = null;
   private scaleInfo: ScaleInfo | null = null;
+  private rgbSplit: RGBSplitFilter | null = null;
 
   constructor(parent: Container, scaleInfo?: ScaleInfo) {
     this.parent = parent;
@@ -33,6 +35,10 @@ export class SlowMotionEffect {
       duration,
       ease: 'power2.in',
     });
+
+    // 포토피니시 색수차 (RGBSplit ±2px)
+    this.rgbSplit = new RGBSplitFilter({ red: [-2, 0], green: [0, 0], blue: [2, 0] });
+    this.parent.filters = [...(this.parent.filters ?? []), this.rgbSplit];
   }
 
   deactivate(): void {
@@ -41,6 +47,12 @@ export class SlowMotionEffect {
     if (this.tween) {
       this.tween.kill();
       this.tween = null;
+    }
+
+    // RGBSplit 제거
+    if (this.rgbSplit) {
+      this.parent.filters = null;
+      this.rgbSplit = null;
     }
 
     if (this.vignette) {

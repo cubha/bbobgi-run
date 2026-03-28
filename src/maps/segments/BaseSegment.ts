@@ -1,18 +1,21 @@
 import { Container, Graphics } from 'pixi.js';
-import type Matter from 'matter-js';
-import { PhysicsWorld } from '@core/PhysicsWorld';
-import type { SegmentBounds, SegmentType, TrackSegment, TrackSegmentDef } from '@maps/types';
+import { PhysicsWorld, type Body } from '@core/PhysicsWorld';
+import type { SegmentBounds, SegmentPort, SegmentType, TrackSegment, TrackSegmentDef } from '@maps/types';
 
 export abstract class BaseSegment implements TrackSegment {
   readonly id: string;
   readonly type: SegmentType;
   readonly container = new Container();
-  readonly bodies: Matter.Body[] = [];
+  readonly bodies: Body[] = [];
   bounds: SegmentBounds;
 
   protected originX: number;
   protected originY: number;
   protected params: Record<string, number | string | boolean>;
+
+  /** 입구/출구 포트 — build() 내에서 setEntry/setExit로 설정 */
+  protected _entry: SegmentPort = { x: 0, y: 0, angle: Math.PI / 2, width: 50 };
+  protected _exit: SegmentPort = { x: 0, y: 0, angle: Math.PI / 2, width: 50 };
 
   constructor(def: TrackSegmentDef) {
     this.id = def.id;
@@ -38,31 +41,24 @@ export abstract class BaseSegment implements TrackSegment {
     y: number,
     w: number,
     h: number,
-    opts: Matter.IChamferableBodyDefinition,
+    opts: { angle?: number; restitution?: number; friction?: number; label?: string },
     color: number,
-  ): Matter.Body {
-    const body = PhysicsWorld.createWall(x, y, w, h, opts);
-    physics.addBodies(body);
+  ): Body {
+    const body = physics.createWall(x, y, w, h, opts);
     this.bodies.push(body);
-    this.drawBody(body, color);
+    this.drawRect(x, y, w, h, opts.angle ?? 0, color);
     return body;
   }
 
-  /** Helper: 정적 원 바디 (핀) */
+  /** Helper: 정적 원 바디 (핀) — createPin() 사용 (restitution 0.5, friction 0.02) */
   protected addPin(
     physics: PhysicsWorld,
     x: number,
     y: number,
     radius: number,
     color: number,
-  ): Matter.Body {
-    const body = PhysicsWorld.createBall(x, y, radius, {
-      isStatic: true,
-      restitution: 0.55,
-      friction: 0.05,
-      label: 'pin',
-    });
-    physics.addBodies(body);
+  ): Body {
+    const body = physics.createPin(x, y, radius);
     this.bodies.push(body);
     const g = new Graphics();
     g.circle(0, 0, radius);
@@ -72,17 +68,36 @@ export abstract class BaseSegment implements TrackSegment {
     return body;
   }
 
-  protected drawBody(body: Matter.Body, color: number, alpha = 0.9): void {
-    const verts = body.vertices;
+  /** Planck.js용 — body.vertices 없으므로 파라미터로 직접 렌더링 */
+  protected drawRect(x: number, y: number, w: number, h: number, angle: number, color: number, alpha = 0.9): void {
     const g = new Graphics();
-    g.moveTo(verts[0].x, verts[0].y);
-    for (let i = 1; i < verts.length; i++) g.lineTo(verts[i].x, verts[i].y);
-    g.closePath();
+    g.rect(-w / 2, -h / 2, w, h);
     g.fill({ color, alpha });
+    // 네온 엣지: 상단 1px 밝은 라인
+    g.rect(-w / 2, -h / 2, w, 1);
+    g.fill({ color: 0xffffff, alpha: 0.15 });
+    g.position.set(x, y);
+    g.rotation = angle;
     this.container.addChild(g);
   }
 
   protected updateBounds(left: number, top: number, right: number, bottom: number): void {
     this.bounds = { left, top, right, bottom };
+  }
+
+  protected setEntry(x: number, y: number, angle: number, width: number): void {
+    this._entry = { x, y, angle, width };
+  }
+
+  protected setExit(x: number, y: number, angle: number, width: number): void {
+    this._exit = { x, y, angle, width };
+  }
+
+  getEntry(): SegmentPort {
+    return this._entry;
+  }
+
+  getExit(): SegmentPort {
+    return this._exit;
   }
 }

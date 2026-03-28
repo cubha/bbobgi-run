@@ -17,7 +17,7 @@ export class BottleneckSegment extends BaseSegment {
   }
 
   build(physics: PhysicsWorld, parent: Container): void {
-    const passWidth = Number(this.params['passWidth'] ?? 60);
+    const passWidth = Number(this.params['passWidth'] ?? 120);
     const wedgeAngle = Number(this.params['wedgeAngle'] ?? 0.45);
     const width = Number(this.params['width'] ?? 300);
     const wedgeLen = 90;
@@ -38,8 +38,6 @@ export class BottleneckSegment extends BaseSegment {
         angle: wedgeAngle,
         restitution: 0.25,
         friction: 0.02,
-        frictionStatic: 0,
-        chamfer: { radius: 2 },
         label: 'bottleneck-left',
       },
       COLORS.purple,
@@ -58,8 +56,6 @@ export class BottleneckSegment extends BaseSegment {
         angle: -wedgeAngle,
         restitution: 0.25,
         friction: 0.02,
-        frictionStatic: 0,
-        chamfer: { radius: 2 },
         label: 'bottleneck-right',
       },
       COLORS.purple,

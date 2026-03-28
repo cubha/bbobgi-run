@@ -80,16 +80,28 @@ export const COLORS = {
   brown: 0xab5236,        // PICO-8 #4 Brown
 } as const;
 
-/** Player colors — PICO-8 팔레트 (up to 10) */
+/** Player colors — Neon Space 10색 (고대비, 10명 완전 구분) */
 export const PLAYER_COLORS = [
-  0xff004d, // #8  Red
-  0x29adff, // #12 Blue
-  0x00e436, // #11 Green
-  0xffa300, // #9  Orange
-  0x7e2553, // #2  Dark Purple
-  0x008751, // #3  Dark Green
-  0xffec27, // #10 Yellow
-  0xff77a8, // #14 Pink
-  0x1d2b53, // #1  Dark Blue
-  0xffccaa, // #15 Peach
+  0xdf0772, // Hot Pink
+  0xfe546f, // Coral
+  0x0bffe6, // Neon Cyan
+  0x01cbcf, // Teal
+  0xff9e7d, // Salmon
+  0xffd080, // Gold Peach
+  0x0188a5, // Deep Cyan
+  0x3e3264, // Purple
+  0xfffdff, // White
+  0x352a55, // Dark Violet
+] as const;
+
+/** 섹션별 배경 색상 (8섹션) — 어두운 네온 톤 */
+export const SECTION_COLORS = [
+  0x0d1020,  // SEC 1: 깊은 남색
+  0x0d1a2a,  // SEC 2: 다크 블루
+  0x0d2020,  // SEC 3: 다크 시안
+  0x0a1a10,  // SEC 4: 다크 그린
+  0x1a1a0a,  // SEC 5: 다크 올리브
+  0x1a0d1a,  // SEC 6: 다크 퍼플
+  0x1a0d0d,  // SEC 7: 다크 레드
+  0x1a1a00,  // SEC 8: 다크 골드
 ] as const;

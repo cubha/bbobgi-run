@@ -2,7 +2,7 @@ import { Container, Graphics } from 'pixi.js';
 import type { CameraMode } from '@maps/types';
 
 /**
- * 2축 카메라 컨트롤러 — worldContainer의 position을 조작하여 뷰포트 이동.
+ * 2축 카메라 컨트롤러 — worldContainer의 position + scale을 조작하여 뷰포트 이동/줌.
  *
  * 모드:
  * - group: 상위 1~3등 평균 위치 추적 (레이싱 페이즈)
@@ -23,8 +23,15 @@ export class CameraController {
   private dragResumeTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly DRAG_RESUME_DELAY = 2000;
 
+  // 줌
+  private _zoom = 1;
+  private static readonly MIN_ZOOM = 0.3;
+  private static readonly MAX_ZOOM = 2.0;
+
   // 히트 영역 (포인터 이벤트 수신용)
   private hitArea: Graphics | null = null;
+  private wheelHandler: ((e: WheelEvent) => void) | null = null;
+  private canvasRef: HTMLCanvasElement | null = null;
 
   private readonly worldContainer: Container;
   private readonly screenW: number;
@@ -47,6 +54,16 @@ export class CameraController {
   }
 
   get mode(): CameraMode { return this._mode; }
+  get zoom(): number { return this._zoom; }
+
+  /** 카메라 위치를 즉시 설정 (lerp 없이) — 초기화용 */
+  setPosition(x: number, y: number): void {
+    this.currentX = x;
+    this.currentY = y;
+    this.targetX = x;
+    this.targetY = y;
+    this.applyPosition();
+  }
 
   // ─── Follow 메서드 ──────────────────────────
 
@@ -79,13 +96,7 @@ export class CameraController {
 
   // ─── Update ─────────────────────────────────
 
-  /**
-   * 매 프레임 호출 — lerp 보간 + 경계 클램프.
-   *
-   * Adaptive lerp: 거리가 크면 빠르게 보정, 가까우면 부드럽게.
-   */
   update(): void {
-    // 드래그 중이거나 복귀 대기 중이면 자동 추적 스킵
     if (this.dragging || this.dragResumeTimer !== null) {
       this.applyPosition();
       return;
@@ -110,35 +121,38 @@ export class CameraController {
     this.applyPosition();
   }
 
-  /** 현재 카메라 위치를 worldContainer에 적용 */
+  /** 현재 카메라 위치를 worldContainer에 적용 (zoom 포함) */
   private applyPosition(): void {
-    const halfW = this.screenW / 2;
-    const halfH = this.screenH / 2;
+    const z = this._zoom;
+    const halfW = this.screenW / (2 * z);
+    const halfH = this.screenH / (2 * z);
 
-    // 월드 경계 클램프
+    // 월드 경계 클램프 (줌 반영)
     const cx = Math.max(halfW, Math.min(this.worldW - halfW, this.currentX));
     const cy = Math.max(halfH, Math.min(this.worldH - halfH, this.currentY));
 
-    this.worldContainer.x = halfW - cx;
-    this.worldContainer.y = halfH - cy;
+    this.worldContainer.scale.set(z);
+    this.worldContainer.x = this.screenW / 2 - cx * z;
+    this.worldContainer.y = this.screenH / 2 - cy * z;
   }
 
-  // ─── Drag Camera ────────────────────────────
+  // ─── Drag + Zoom Camera ────────────────────
 
   /**
-   * 드래그 카메라 셋업 — hitArea를 parent(보통 hudContainer)에 추가.
-   * X+Y 모두 드래그 가능.
+   * 드래그 + 줌 카메라 셋업.
+   * hitArea를 interactionLayer(화면 최상위)에 추가하여 전체 화면에서 드래그 가능.
    *
-   * @param parent hitArea를 추가할 컨테이너 (화면 고정 UI 위)
-   * @param getScale 현재 캔버스 스케일 반환 함수 (드래그 보정용)
+   * @param interactionLayer 히트영역 컨테이너 (scene.container 최상위)
+   * @param getScale 현재 캔버스 스케일 반환 함수
+   * @param canvas HTML canvas 엘리먼트 (wheel zoom용)
    */
-  setupDrag(parent: Container, getScale: () => number): void {
+  setupDrag(interactionLayer: Container, getScale: () => number, canvas?: HTMLCanvasElement): void {
     this.hitArea = new Graphics();
     this.hitArea.rect(0, 0, this.screenW, this.screenH);
     this.hitArea.fill({ color: 0x000000, alpha: 0.001 });
     this.hitArea.eventMode = 'static';
     this.hitArea.cursor = 'grab';
-    parent.addChildAt(this.hitArea, 0);
+    interactionLayer.addChild(this.hitArea);
 
     this.hitArea.on('pointerdown', (e) => {
       this.dragging = true;
@@ -157,12 +171,11 @@ export class CameraController {
       if (!this.dragging) return;
 
       const scale = getScale();
-      const ddx = (e.globalX - this.dragLastX) / scale;
-      const ddy = (e.globalY - this.dragLastY) / scale;
+      const ddx = (e.globalX - this.dragLastX) / (scale * this._zoom);
+      const ddy = (e.globalY - this.dragLastY) / (scale * this._zoom);
       this.dragLastX = e.globalX;
       this.dragLastY = e.globalY;
 
-      // 드래그 방향과 카메라 이동은 반대 (drag left → camera right)
       this.currentX = Math.max(0, Math.min(this.worldW, this.currentX - ddx));
       this.currentY = Math.max(0, Math.min(this.worldH, this.currentY - ddy));
     });
@@ -180,17 +193,34 @@ export class CameraController {
 
     this.hitArea.on('pointerup', endDrag);
     this.hitArea.on('pointerupoutside', endDrag);
+
+    // Wheel zoom
+    if (canvas) {
+      this.canvasRef = canvas;
+      this.wheelHandler = (e: WheelEvent) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        this._zoom = Math.max(
+          CameraController.MIN_ZOOM,
+          Math.min(CameraController.MAX_ZOOM, this._zoom + delta),
+        );
+        this.applyPosition();
+      };
+      canvas.addEventListener('wheel', this.wheelHandler, { passive: false });
+    }
   }
 
   // ─── Getters (Culling용) ────────────────────
 
-  /** 현재 뷰포트의 월드 좌표 영역 */
+  /** 현재 뷰포트의 월드 좌표 영역 (zoom 반영) */
   getViewBounds(): { left: number; top: number; right: number; bottom: number } {
+    const halfW = this.screenW / (2 * this._zoom);
+    const halfH = this.screenH / (2 * this._zoom);
     return {
-      left: this.currentX - this.screenW / 2,
-      top: this.currentY - this.screenH / 2,
-      right: this.currentX + this.screenW / 2,
-      bottom: this.currentY + this.screenH / 2,
+      left: this.currentX - halfW,
+      top: this.currentY - halfH,
+      right: this.currentX + halfW,
+      bottom: this.currentY + halfH,
     };
   }
 
@@ -205,6 +235,11 @@ export class CameraController {
     if (this.dragResumeTimer !== null) {
       clearTimeout(this.dragResumeTimer);
       this.dragResumeTimer = null;
+    }
+    if (this.wheelHandler && this.canvasRef) {
+      this.canvasRef.removeEventListener('wheel', this.wheelHandler);
+      this.wheelHandler = null;
+      this.canvasRef = null;
     }
     this.hitArea?.destroy();
     this.hitArea = null;

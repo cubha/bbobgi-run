@@ -39,8 +39,6 @@ export class SplitterSegment extends BaseSegment {
         angle: wedgeAngle,
         restitution: 0.25,
         friction: 0.02,
-        frictionStatic: 0,
-        chamfer: { radius: 2 },
         label: 'splitter-left',
       },
       COLORS.orange,
@@ -60,8 +58,6 @@ export class SplitterSegment extends BaseSegment {
         angle: -wedgeAngle,
         restitution: 0.25,
         friction: 0.02,
-        frictionStatic: 0,
-        chamfer: { radius: 2 },
         label: 'splitter-right',
       },
       COLORS.orange,
@@ -81,7 +77,6 @@ export class SplitterSegment extends BaseSegment {
       {
         restitution: 0.2,
         friction: 0.02,
-        frictionStatic: 0,
         label: 'splitter-guide-left',
       },
       COLORS.orange,
@@ -97,7 +92,6 @@ export class SplitterSegment extends BaseSegment {
       {
         restitution: 0.2,
         friction: 0.02,
-        frictionStatic: 0,
         label: 'splitter-guide-right',
       },
       COLORS.orange,

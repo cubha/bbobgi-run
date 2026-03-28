@@ -1,0 +1,188 @@
+{
+  "testSuite": "Marble Race V3 — Unit Test v2",
+  "timestamp": "2026-03-28T01:45:51.817Z",
+  "summary": {
+    "total": 8,
+    "pass": 0,
+    "fail": 0,
+    "warn": 8
+  },
+  "scenarios": [
+    {
+      "id": "S1",
+      "name": "2명 최소 인원 완주 (1등뽑기)",
+      "status": "WARN",
+      "detail": "게임 시작 확인. 14개 프레임 캡처. 결과화면: 도달. 2명+4더미=6구슬. | Warnings: 10건",
+      "duration": "48.9",
+      "failPoint": "",
+      "consoleErrors": [],
+      "consoleWarnings": [
+        "    at MainMenuScene.drawBallCountBtn (http://localhost:5177/src/scenes/MainMenuScene.ts:261:6)\n    at http://localhost:5177/src/scenes/MainMenuScene.ts:233:9\n    at Array.forEach (<anonymous>)\n    at MainMenuScene.buildBallCountSection (http://localhost:5177/src/scenes/MainMenuScene.ts:224:10)\n    at MainMenuScene.init (http://localhost:5177/src/scenes/MainMenuScene.ts:61:8)\n    at MainMenuScene.enter (http://localhost:5177/src/core/BaseScene.ts:20:14)\n    at SceneManager.transition (http://localhost:5177/src/core/SceneManager.ts:20:19)\n    at showMenu (http://localhost:5177/src/main.ts:33:20)",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 0.5, scaleY: 0.5} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()"
+      ],
+      "screenshotCount": 14
+    },
+    {
+      "id": "S2",
+      "name": "6명 경계값 완주 (꼴등뽑기)",
+      "status": "WARN",
+      "detail": "6명 경계값 완주. 14개 프레임 캡처. 더미 없음 (MIN_MARBLES=6). | Warnings: 10건",
+      "duration": "49.6",
+      "failPoint": "",
+      "consoleErrors": [],
+      "consoleWarnings": [
+        "    at MainMenuScene.drawBallCountBtn (http://localhost:5177/src/scenes/MainMenuScene.ts:261:6)\n    at http://localhost:5177/src/scenes/MainMenuScene.ts:233:9\n    at Array.forEach (<anonymous>)\n    at MainMenuScene.buildBallCountSection (http://localhost:5177/src/scenes/MainMenuScene.ts:224:10)\n    at MainMenuScene.init (http://localhost:5177/src/scenes/MainMenuScene.ts:61:8)\n    at MainMenuScene.enter (http://localhost:5177/src/core/BaseScene.ts:20:14)\n    at SceneManager.transition (http://localhost:5177/src/core/SceneManager.ts:20:19)\n    at showMenu (http://localhost:5177/src/main.ts:33:20)",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 0.5, scaleY: 0.5} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()"
+      ],
+      "screenshotCount": 14
+    },
+    {
+      "id": "S3",
+      "name": "10명 최대 인원 완주+병목",
+      "status": "WARN",
+      "detail": "10명 최대 인원 완주. 14개 프레임 캡처. 10구슬 병목 구간 통과 검증. | Warnings: 10건",
+      "duration": "53.3",
+      "failPoint": "",
+      "consoleErrors": [],
+      "consoleWarnings": [
+        "    at MainMenuScene.drawBallCountBtn (http://localhost:5177/src/scenes/MainMenuScene.ts:261:6)\n    at http://localhost:5177/src/scenes/MainMenuScene.ts:233:9\n    at Array.forEach (<anonymous>)\n    at MainMenuScene.buildBallCountSection (http://localhost:5177/src/scenes/MainMenuScene.ts:224:10)\n    at MainMenuScene.init (http://localhost:5177/src/scenes/MainMenuScene.ts:61:8)\n    at MainMenuScene.enter (http://localhost:5177/src/core/BaseScene.ts:20:14)\n    at SceneManager.transition (http://localhost:5177/src/core/SceneManager.ts:20:19)\n    at showMenu (http://localhost:5177/src/main.ts:33:20)",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 0.5, scaleY: 0.5} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()"
+      ],
+      "screenshotCount": 14
+    },
+    {
+      "id": "S4",
+      "name": "카오스+슬로모 타임라인 검증 (4명)",
+      "status": "WARN",
+      "detail": "타임라인 11개 프레임 캡처: countdown→racing→booster→lightning→chaos→tension→slowmo→end→result | Warnings: 10건",
+      "duration": "45.2",
+      "failPoint": "",
+      "consoleErrors": [],
+      "consoleWarnings": [
+        "    at MainMenuScene.drawBallCountBtn (http://localhost:5177/src/scenes/MainMenuScene.ts:261:6)\n    at http://localhost:5177/src/scenes/MainMenuScene.ts:233:9\n    at Array.forEach (<anonymous>)\n    at MainMenuScene.buildBallCountSection (http://localhost:5177/src/scenes/MainMenuScene.ts:224:10)\n    at MainMenuScene.init (http://localhost:5177/src/scenes/MainMenuScene.ts:61:8)\n    at MainMenuScene.enter (http://localhost:5177/src/core/BaseScene.ts:20:14)\n    at SceneManager.transition (http://localhost:5177/src/core/SceneManager.ts:20:19)\n    at showMenu (http://localhost:5177/src/main.ts:33:20)",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 0.5, scaleY: 0.5} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()"
+      ],
+      "screenshotCount": 11
+    },
+    {
+      "id": "S5",
+      "name": "Stuck Detection 동작 검증 (4명)",
+      "status": "WARN",
+      "detail": "Stuck 감지 검증. 20개 프레임 캡처. 게임 정상 완료 = stuck 복구/retire 동작 확인. | Warnings: 10건",
+      "duration": "49.2",
+      "failPoint": "",
+      "consoleErrors": [],
+      "consoleWarnings": [
+        "    at MainMenuScene.drawBallCountBtn (http://localhost:5177/src/scenes/MainMenuScene.ts:261:6)\n    at http://localhost:5177/src/scenes/MainMenuScene.ts:233:9\n    at Array.forEach (<anonymous>)\n    at MainMenuScene.buildBallCountSection (http://localhost:5177/src/scenes/MainMenuScene.ts:224:10)\n    at MainMenuScene.init (http://localhost:5177/src/scenes/MainMenuScene.ts:61:8)\n    at MainMenuScene.enter (http://localhost:5177/src/core/BaseScene.ts:20:14)\n    at SceneManager.transition (http://localhost:5177/src/core/SceneManager.ts:20:19)\n    at showMenu (http://localhost:5177/src/main.ts:33:20)",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 0.5, scaleY: 0.5} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()"
+      ],
+      "screenshotCount": 20
+    },
+    {
+      "id": "S6",
+      "name": "카메라 드래그+줌+자동복귀 (4명)",
+      "status": "WARN",
+      "detail": "카메라 조작 완료: drag→auto-resume→zoom-in→zoom-out. 게임 프레임 8개 캡처. | Warnings: 10건",
+      "duration": "48.4",
+      "failPoint": "",
+      "consoleErrors": [],
+      "consoleWarnings": [
+        "    at MainMenuScene.drawBallCountBtn (http://localhost:5177/src/scenes/MainMenuScene.ts:261:6)\n    at http://localhost:5177/src/scenes/MainMenuScene.ts:233:9\n    at Array.forEach (<anonymous>)\n    at MainMenuScene.buildBallCountSection (http://localhost:5177/src/scenes/MainMenuScene.ts:224:10)\n    at MainMenuScene.init (http://localhost:5177/src/scenes/MainMenuScene.ts:61:8)\n    at MainMenuScene.enter (http://localhost:5177/src/core/BaseScene.ts:20:14)\n    at SceneManager.transition (http://localhost:5177/src/core/SceneManager.ts:20:19)\n    at showMenu (http://localhost:5177/src/main.ts:33:20)",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 0.5, scaleY: 0.5} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()"
+      ],
+      "screenshotCount": 13
+    },
+    {
+      "id": "S7",
+      "name": "HUD 타이머+순위 라벨 검증 (4명)",
+      "status": "WARN",
+      "detail": "HUD 검증 14개 프레임: countdown(0-3s)→timer bar→rank labels→phase labels. | Warnings: 10건",
+      "duration": "49.3",
+      "failPoint": "",
+      "consoleErrors": [],
+      "consoleWarnings": [
+        "    at MainMenuScene.drawBallCountBtn (http://localhost:5177/src/scenes/MainMenuScene.ts:261:6)\n    at http://localhost:5177/src/scenes/MainMenuScene.ts:233:9\n    at Array.forEach (<anonymous>)\n    at MainMenuScene.buildBallCountSection (http://localhost:5177/src/scenes/MainMenuScene.ts:224:10)\n    at MainMenuScene.init (http://localhost:5177/src/scenes/MainMenuScene.ts:61:8)\n    at MainMenuScene.enter (http://localhost:5177/src/core/BaseScene.ts:20:14)\n    at SceneManager.transition (http://localhost:5177/src/core/SceneManager.ts:20:19)\n    at showMenu (http://localhost:5177/src/main.ts:33:20)",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 0.5, scaleY: 0.5} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()"
+      ],
+      "screenshotCount": 14
+    },
+    {
+      "id": "S8",
+      "name": "콘솔 에러 0건 전체 실행 (4명)",
+      "status": "WARN",
+      "detail": "콘솔 에러 0건. 14개 프레임 정상 실행. Warnings: 10건. | Warnings: 10건",
+      "duration": "49.3",
+      "failPoint": "",
+      "consoleErrors": [],
+      "consoleWarnings": [
+        "    at MainMenuScene.drawBallCountBtn (http://localhost:5177/src/scenes/MainMenuScene.ts:261:6)\n    at http://localhost:5177/src/scenes/MainMenuScene.ts:233:9\n    at Array.forEach (<anonymous>)\n    at MainMenuScene.buildBallCountSection (http://localhost:5177/src/scenes/MainMenuScene.ts:224:10)\n    at MainMenuScene.init (http://localhost:5177/src/scenes/MainMenuScene.ts:61:8)\n    at MainMenuScene.enter (http://localhost:5177/src/core/BaseScene.ts:20:14)\n    at SceneManager.transition (http://localhost:5177/src/core/SceneManager.ts:20:19)\n    at showMenu (http://localhost:5177/src/main.ts:33:20)",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1.8, scaleY: 1.8} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 0.5, scaleY: 0.5} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()",
+        "Invalid property pixi set to {scaleX: 1, scaleY: 1} Missing plugin? gsap.registerPlugin()"
+      ],
+      "screenshotCount": 14
+    }
+  ]
+}

@@ -44,8 +44,6 @@ export class StaircaseSegment extends BaseSegment {
           angle: tiltAngle,
           restitution: 0.2,
           friction: 0.02,
-          frictionStatic: 0,
-          chamfer: { radius: 2 },
           label: `staircase-step-${i}`,
         },
         i % 2 === 0 ? COLORS.brown : COLORS.darkGray,
