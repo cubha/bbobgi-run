@@ -1,7 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import Matter from 'matter-js';
 import { BaseScene } from '@core/BaseScene';
-import { PhysicsWorld } from '@core/PhysicsWorld';
+import { PhysicsWorld, Vec2, CircleShape, BoxShape, type Body } from '@core/PhysicsWorld';
 import { CountdownEffect } from '@effects/CountdownEffect';
 import { SlowMotionEffect } from '@effects/SlowMotionEffect';
 import { ShakeEffect } from '@effects/ShakeEffect';
@@ -54,7 +53,7 @@ const SPINNER_W = 60;
 const SPINNER_H = 8;
 
 interface PachinkoBall {
-  body: Matter.Body;
+  body: Body;
   gfx: Container;
   player: Player;
   finished: boolean;
@@ -62,18 +61,18 @@ interface PachinkoBall {
 }
 
 interface Bumper {
-  body: Matter.Body;
+  body: Body;
   gfx: Graphics;
   overcharged: boolean;
 }
 
 interface Spinner {
-  body: Matter.Body;
+  body: Body;
   gfx: Graphics;
 }
 
 interface Gate {
-  body: Matter.Body;
+  body: Body;
   gfx: Graphics;
   open: boolean;
 }
@@ -105,7 +104,7 @@ export class PachinkoScene extends BaseScene {
 
   private timerBar: Graphics | null = null;
   private phaseLabel: Text | null = null;
-  private goalSensor: Matter.Body | null = null;
+  private goalSensor: Body | null = null;
   private rankLabel: Text | null = null;
 
   private chaosApplied = false;
@@ -135,7 +134,7 @@ export class PachinkoScene extends BaseScene {
     if (!this.config) return;
 
     this.rng = new SeededRandom(this.config.seed);
-    this.physics = new PhysicsWorld({ x: 0, y: 1 });
+    this.physics = new PhysicsWorld({ x: 0, y: 980 });
 
     this.container.addChild(this.boardContainer);
     this.container.addChild(this.ballContainer);
@@ -169,7 +168,7 @@ export class PachinkoScene extends BaseScene {
     } else if (this.phase === 'chaos' && gameElapsed >= PACHINKO_TENSION_SEC) {
       this.phase = 'tension';
       this.setPhaseLabel('');
-      this.physics.setGravity(0, 1);
+      this.physics.setGravity(0, 980);
     } else if (!this.chaosApplied && gameElapsed >= PACHINKO_CHAOS_SEC) {
       this.applyChaos();
     }
@@ -206,16 +205,17 @@ export class PachinkoScene extends BaseScene {
 
     // Sync ball sprites
     for (const ball of this.balls) {
-      if (!ball.body.isStatic) {
-        ball.gfx.x = ball.body.position.x;
-        ball.gfx.y = ball.body.position.y;
-        ball.gfx.rotation = ball.body.angle;
+      if (!ball.body.isStatic()) {
+        const pos = ball.body.getPosition();
+        ball.gfx.x = pos.x;
+        ball.gfx.y = pos.y;
+        ball.gfx.rotation = ball.body.getAngle();
       }
     }
 
     // Sync spinner sprites
     for (const spinner of this.spinners) {
-      spinner.gfx.rotation = spinner.body.angle;
+      spinner.gfx.rotation = spinner.body.getAngle();
     }
 
     // Sync gate sprites
@@ -240,6 +240,10 @@ export class PachinkoScene extends BaseScene {
     this.countdown?.destroy();
     this.slowMo?.destroy();
     this.chaos?.destroy();
+    if (this.goalSensor) {
+      this.physics?.removeBodies(this.goalSensor);
+      this.goalSensor = null;
+    }
     this.physics?.destroy();
     this.physics = null;
     super.destroy();
@@ -268,10 +272,8 @@ export class PachinkoScene extends BaseScene {
     // Left/right walls
     const wallH = BOARD.funnelBottomY - BOARD.topY + 40;
     const wallMidY = (BOARD.topY + BOARD.funnelBottomY) / 2;
-    this.physics.addBodies(
-      PhysicsWorld.createWall(BOARD.leftX, wallMidY, BOARD.wallThick, wallH),
-      PhysicsWorld.createWall(BOARD.rightX, wallMidY, BOARD.wallThick, wallH),
-    );
+    this.physics.createWall(BOARD.leftX, wallMidY, BOARD.wallThick, wallH);
+    this.physics.createWall(BOARD.rightX, wallMidY, BOARD.wallThick, wallH);
 
     // Wall visuals
     const wallGfx = new Graphics();
@@ -310,8 +312,7 @@ export class PachinkoScene extends BaseScene {
         const px = pinStartX + offsetX + col * actualSpacing;
         const py = pinStartY + row * BOARD.pinSpacingY;
 
-        const pin = PhysicsWorld.createPin(px, py, BOARD.pinRadius);
-        this.physics.addBodies(pin);
+        this.physics.createPin(px, py, BOARD.pinRadius);
 
         const pinGfx = new Graphics();
         pinGfx.circle(px, py, BOARD.pinRadius);
@@ -361,13 +362,9 @@ export class PachinkoScene extends BaseScene {
   private addBumper(x: number, y: number): void {
     if (!this.physics) return;
 
-    const body = Matter.Bodies.circle(x, y, BUMPER_RADIUS, {
-      isStatic: true,
-      restitution: 1.5,
-      friction: 0,
-      label: 'bumper',
-    });
-    this.physics.addBodies(body);
+    const body = this.physics.createStaticBody(x, y);
+    body.createFixture(new CircleShape(BUMPER_RADIUS), { restitution: 1.5, friction: 0 });
+    body.setUserData({ label: 'bumper' });
 
     const gfx = new Graphics();
     gfx.circle(x, y, BUMPER_RADIUS);
@@ -382,13 +379,9 @@ export class PachinkoScene extends BaseScene {
   private addSpinner(x: number, y: number): void {
     if (!this.physics) return;
 
-    const body = Matter.Bodies.rectangle(x, y, SPINNER_W, SPINNER_H, {
-      isStatic: true,
-      friction: 0,
-      restitution: 0.3,
-      label: 'spinner',
-    });
-    this.physics.addBodies(body);
+    const body = this.physics.createStaticBody(x, y);
+    body.createFixture(new BoxShape(SPINNER_W / 2, SPINNER_H / 2), { friction: 0, restitution: 0.3 });
+    body.setUserData({ label: 'spinner' });
 
     const gfx = new Graphics();
     gfx.rect(-SPINNER_W / 2, -SPINNER_H / 2, SPINNER_W, SPINNER_H);
@@ -403,8 +396,7 @@ export class PachinkoScene extends BaseScene {
   private addGate(x: number, y: number, width: number): void {
     if (!this.physics) return;
 
-    const body = PhysicsWorld.createWall(x, y, width, 8);
-    this.physics.addBodies(body);
+    const body = this.physics.createWall(x, y, width, 8);
 
     const gfx = new Graphics();
     gfx.rect(x - width / 2, y - 4, width, 8);
@@ -431,10 +423,9 @@ export class PachinkoScene extends BaseScene {
     const leftAngle = Math.atan2(funnelH, holeLeft - funnelTopLeft);
     const leftFunnelX = (funnelTopLeft + holeLeft) / 2;
     const leftFunnelY = (BOARD.funnelTopY + BOARD.funnelBottomY) / 2;
-    const leftWall = PhysicsWorld.createWall(leftFunnelX, leftFunnelY, leftWallLen, 8, {
+    this.physics.createWall(leftFunnelX, leftFunnelY, leftWallLen, 8, {
       angle: leftAngle,
     });
-    this.physics.addBodies(leftWall);
 
     // Right funnel wall
     const rightWallLen = Math.sqrt(
@@ -443,24 +434,19 @@ export class PachinkoScene extends BaseScene {
     const rightAngle = Math.atan2(funnelH, funnelTopRight - holeRight) * -1;
     const rightFunnelX = (funnelTopRight + holeRight) / 2;
     const rightFunnelY = (BOARD.funnelTopY + BOARD.funnelBottomY) / 2;
-    const rightWall = PhysicsWorld.createWall(rightFunnelX, rightFunnelY, rightWallLen, 8, {
+    this.physics.createWall(rightFunnelX, rightFunnelY, rightWallLen, 8, {
       angle: rightAngle,
     });
-    this.physics.addBodies(rightWall);
 
     // Floor below funnel (with gap = goal hole)
     const floorY = BOARD.funnelBottomY + 4;
     const leftFloorW = holeLeft - (BOARD.leftX + BOARD.wallThick);
     const rightFloorW = (BOARD.rightX - BOARD.wallThick) - holeRight;
     if (leftFloorW > 0) {
-      this.physics.addBodies(
-        PhysicsWorld.createWall(BOARD.leftX + BOARD.wallThick + leftFloorW / 2, floorY, leftFloorW, 8),
-      );
+      this.physics.createWall(BOARD.leftX + BOARD.wallThick + leftFloorW / 2, floorY, leftFloorW, 8);
     }
     if (rightFloorW > 0) {
-      this.physics.addBodies(
-        PhysicsWorld.createWall(holeRight + rightFloorW / 2, floorY, rightFloorW, 8),
-      );
+      this.physics.createWall(holeRight + rightFloorW / 2, floorY, rightFloorW, 8);
     }
 
     // Draw funnel visual
@@ -492,8 +478,7 @@ export class PachinkoScene extends BaseScene {
     this.boardContainer.addChild(goalText);
 
     // Sensor body
-    this.goalSensor = PhysicsWorld.createSensor(cx, BOARD.goalY, BOARD.goalWidth + 10, 30, 'goal');
-    this.physics.addBodies(this.goalSensor);
+    this.goalSensor = this.physics.createSensor(cx, BOARD.goalY, BOARD.goalWidth + 10, 30, 'goal');
 
     // Rank display area below goal
     this.rankLabel = new Text({
@@ -521,13 +506,13 @@ export class PachinkoScene extends BaseScene {
         const x = cx;
         const y = BOARD.dropAreaY;
 
-        const body = PhysicsWorld.createBall(x, y, BOARD.ballRadius, {
+        const body = this.physics!.createBall(x, y, BOARD.ballRadius, {
           restitution: 0.5,
           friction: 0.005,
-          frictionAir: 0.015,
+          linearDamping: 0.015,
+          label: `ball-${player.id}-${bi}`,
         });
-        Matter.Body.setStatic(body, true);
-        body.label = `ball-${player.id}-${bi}`;
+        body.setType('static');
 
         const gfx = new Container();
         const circle = new Graphics();
@@ -566,10 +551,9 @@ export class PachinkoScene extends BaseScene {
     const spread = (BOARD.rightX - BOARD.leftX) * 0.28;
     const dropX = cx + this.rng.range(-spread, spread);
 
-    Matter.Body.setStatic(ball.body, false);
-    Matter.Body.setPosition(ball.body, { x: dropX, y: BOARD.dropAreaY });
-    Matter.Body.setVelocity(ball.body, { x: this.rng.range(-1, 1), y: 1 });
-    this.physics.addBodies(ball.body);
+    ball.body.setType('dynamic');
+    ball.body.setPosition(new Vec2(dropX, BOARD.dropAreaY));
+    ball.body.setLinearVelocity(new Vec2(this.rng.range(-1, 1), 1));
     ball.gfx.visible = true;
     ball.gfx.x = dropX;
     ball.gfx.y = BOARD.dropAreaY;
@@ -581,47 +565,48 @@ export class PachinkoScene extends BaseScene {
     if (!this.physics) return;
 
     // Collision: goal sensor + bumpers
-    this.physics.onCollisionStart((event) => {
-      for (const pair of event.pairs) {
-        const { bodyA, bodyB } = pair;
+    this.physics.onCollisionStart((contact) => {
+      const bodyA = contact.getFixtureA().getBody();
+      const bodyB = contact.getFixtureB().getBody();
+      const labelA = (bodyA.getUserData() as { label?: string } | null)?.label ?? '';
+      const labelB = (bodyB.getUserData() as { label?: string } | null)?.label ?? '';
 
-        // Goal detection
-        const isGoalA = bodyA.label === 'goal';
-        const isGoalB = bodyB.label === 'goal';
-        if (isGoalA || isGoalB) {
-          const ballBody = isGoalA ? bodyB : bodyA;
-          const ball = this.balls.find((b) => b.body === ballBody && !b.finished);
-          if (ball) {
-            ball.finished = true;
-            ball.finishTime = this.totalElapsed;
-            // First ball of this player to arrive counts
-            if (!this.finishOrder.some((p) => p.id === ball.player.id)) {
-              this.finishOrder.push(ball.player);
-              this.updateRankLabel();
-            }
-            Matter.Body.setStatic(ballBody, true);
+      // Goal detection
+      const isGoalA = labelA === 'goal';
+      const isGoalB = labelB === 'goal';
+      if (isGoalA || isGoalB) {
+        const ballBody = isGoalA ? bodyB : bodyA;
+        const ball = this.balls.find((b) => b.body === ballBody && !b.finished);
+        if (ball) {
+          ball.finished = true;
+          ball.finishTime = this.totalElapsed;
+          if (!this.finishOrder.some((p) => p.id === ball.player.id)) {
+            this.finishOrder.push(ball.player);
+            this.updateRankLabel();
           }
+          ballBody.setType('static');
         }
+      }
 
-        // Bumper hit — apply repulsion
-        const isBumperA = bodyA.label === 'bumper';
-        const isBumperB = bodyB.label === 'bumper';
-        if (isBumperA || isBumperB) {
-          const bumperBody = isBumperA ? bodyA : bodyB;
-          const ballBody = isBumperA ? bodyB : bodyA;
-          const ball = this.balls.find((b) => b.body === ballBody && !b.finished);
-          if (ball) {
-            const bumper = this.bumpers.find((bm) => bm.body === bumperBody);
-            const force = bumper?.overcharged ? 0.025 : 0.012;
-            const dx = ballBody.position.x - bumperBody.position.x;
-            const dy = ballBody.position.y - bumperBody.position.y;
-            const len = Math.sqrt(dx * dx + dy * dy) || 1;
-            Matter.Body.setVelocity(ballBody, {
-              x: (dx / len) * 8 * (bumper?.overcharged ? 2 : 1),
-              y: (dy / len) * 8 * (bumper?.overcharged ? 2 : 1),
-            });
-            void force;
-          }
+      // Bumper hit — apply repulsion
+      const isBumperA = labelA === 'bumper';
+      const isBumperB = labelB === 'bumper';
+      if (isBumperA || isBumperB) {
+        const bumperBody = isBumperA ? bodyA : bodyB;
+        const ballBody = isBumperA ? bodyB : bodyA;
+        const ball = this.balls.find((b) => b.body === ballBody && !b.finished);
+        if (ball) {
+          const bumper = this.bumpers.find((bm) => bm.body === bumperBody);
+          const ballPos = ballBody.getPosition();
+          const bumperPos = bumperBody.getPosition();
+          const dx = ballPos.x - bumperPos.x;
+          const dy = ballPos.y - bumperPos.y;
+          const len = Math.sqrt(dx * dx + dy * dy) || 1;
+          const mult = bumper?.overcharged ? 2 : 1;
+          ballBody.setLinearVelocity(new Vec2(
+            (dx / len) * 8 * mult,
+            (dy / len) * 8 * mult,
+          ));
         }
       }
     });
@@ -630,21 +615,18 @@ export class PachinkoScene extends BaseScene {
     this.physics.onBeforeUpdate(() => {
       // Rotate spinners
       for (const spinner of this.spinners) {
-        Matter.Body.setAngle(spinner.body, spinner.body.angle + 0.05);
+        spinner.body.setAngle(spinner.body.getAngle() + 0.05);
       }
 
       // Speed floor — prevent stuck balls
       for (const ball of this.balls) {
         if (ball.finished) continue;
-        const vx = ball.body.velocity.x;
-        const vy = ball.body.velocity.y;
-        const speed = Math.sqrt(vx * vx + vy * vy);
+        const vel = ball.body.getLinearVelocity();
+        const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
         if (speed < 0.5 && speed > 0) {
-          const dir = Matter.Vector.normalise(ball.body.velocity);
-          Matter.Body.setVelocity(ball.body, { x: dir.x * 0.5, y: dir.y * 0.5 });
-        } else if (speed === 0 && !ball.body.isStatic) {
-          // Completely stuck — nudge down
-          Matter.Body.setVelocity(ball.body, { x: this.rng!.range(-0.5, 0.5), y: 1 });
+          ball.body.setLinearVelocity(new Vec2((vel.x / speed) * 0.5, (vel.y / speed) * 0.5));
+        } else if (speed === 0 && !ball.body.isStatic()) {
+          ball.body.setLinearVelocity(new Vec2(this.rng!.range(-0.5, 0.5), 1));
         }
       }
     });
@@ -655,11 +637,7 @@ export class PachinkoScene extends BaseScene {
   private toggleGates(): void {
     for (const gate of this.gates) {
       gate.open = !gate.open;
-      if (gate.open) {
-        this.physics?.removeBodies(gate.body);
-      } else {
-        this.physics?.addBodies(gate.body);
-      }
+      gate.body.setActive(!gate.open);
     }
   }
 
@@ -668,12 +646,12 @@ export class PachinkoScene extends BaseScene {
     this.bumperOvercharged = true;
     for (const bumper of this.bumpers) {
       bumper.overcharged = true;
-      bumper.body.restitution = 3.0;
       // Redraw bumper white
+      const pos = bumper.body.getPosition();
       bumper.gfx.clear();
-      bumper.gfx.circle(bumper.body.position.x, bumper.body.position.y, BUMPER_RADIUS);
+      bumper.gfx.circle(pos.x, pos.y, BUMPER_RADIUS);
       bumper.gfx.fill({ color: COLORS.text, alpha: 0.95 });
-      bumper.gfx.circle(bumper.body.position.x, bumper.body.position.y, BUMPER_RADIUS * 0.55);
+      bumper.gfx.circle(pos.x, pos.y, BUMPER_RADIUS * 0.55);
       bumper.gfx.fill({ color: COLORS.primary, alpha: 0.8 });
     }
   }
@@ -782,7 +760,7 @@ export class PachinkoScene extends BaseScene {
     this.shaker.shake(this.ballContainer, 5, 6);
 
     // Gravity shift
-    this.physics.setGravity(0.4, 0.9);
+    this.physics.setGravity(400, 900);
 
     // Bumper overcharge after first arrival (or trigger now if some already done)
     if (this.finishOrder.length > 0) {

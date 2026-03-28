@@ -68,11 +68,11 @@ else
   pass "PixiJS v8 async init 패턴"
 fi
 
-# Matter.js abstraction
-if grep -rn "from 'matter-js'" src/ --include="*.ts" | grep -v "PhysicsWorld" > /dev/null 2>&1; then
-  warn "Matter.js 직접 import 감지 — PhysicsWorld 래퍼를 통해 사용 권장"
+# Planck.js abstraction (must go through PhysicsWorld)
+if grep -rn "from 'planck'" src/ --include="*.ts" | grep -v "PhysicsWorld" > /dev/null 2>&1; then
+  warn "Planck.js 직접 import 감지 — PhysicsWorld 래퍼를 통해 사용 권장"
 else
-  pass "Matter.js PhysicsWorld 추상화"
+  pass "Planck.js PhysicsWorld 추상화"
 fi
 
 # No any type

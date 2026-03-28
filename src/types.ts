@@ -8,6 +8,7 @@ export type PickMode = 'first' | 'last';
 export interface Player {
   id: number;
   name: string;
+  isDummy?: boolean;
 }
 
 /** Game configuration passed from MainMenu to GameScene */
@@ -18,6 +19,7 @@ export interface GameConfig {
   seed?: number;
   ballCount?: number;
   lapCount?: number;
+  marbleCount?: number;  // 구슬 레이스 구슬 수 (기본 1)
 }
 
 /** Final ranking result */

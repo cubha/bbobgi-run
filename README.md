@@ -23,22 +23,22 @@
 | # | 모드 | 특성 | 물리엔진 | 시간 |
 |---|---|---|---|---|
 | 1 | **경마 (Horse Racing)** | 횡스크롤 레이스, 랜덤 속도 변화 | 불필요 | 30초 |
-| 2 | **구슬 레이스 (Marble Race)** | 물리 트랙 굴러내리기 | Matter.js | 30초 |
+| 2 | **구슬 레이스 (Marble Race)** | V3 어드벤처 코스 — 깔때기→채널→U턴→물레방아→나선→장애물→스프린트 | Planck.js | 완주 기반 |
 | 3 | **사다리타기** | 자동 생성 사다리, 라인 애니메이션 | 불필요 | ~20초 |
-| 4 | **핀볼/파친코 (Pachinko)** | 공이 핀에 부딪히며 하강 | Matter.js | 20~30초 |
+| 4 | **핀볼/파친코 (Pachinko)** | 공이 핀에 부딪히며 하강 | Planck.js | 20~30초 |
 
 ## 기술 스택
 
 | 분류 | 기술 | 버전 | 비고 |
 |---|---|---|---|
 | 렌더링 | PixiJS | v8.17.0+ | WebGPU 지원, `await app.init()` 패턴 |
-| 물리 | Matter.js | 0.20.0 | 구슬/핀볼 모드 전용, PhysicsWorld 래퍼 통해 사용 |
+| 물리 | Planck.js | 1.x | 구슬/핀볼 모드 전용, PhysicsWorld 래퍼 통해 사용 (Matter.js에서 전환) |
 | 애니메이션 | GSAP | 3.12+ | PixiJS 오브젝트 직접 트윈 |
 | 사운드 | Howler.js | 2.2+ | SoundManager 래퍼 통해 사용 |
 | 로컬 DB | Dexie.js | 4.3+ | IndexedDB 래퍼 — 게임 기록/전적 저장 |
 | 번들러 | Vite | 8.x | Vanilla TypeScript (React 없음) |
 | 언어 | TypeScript | 5.9+ | strict mode, path alias |
-| 예상 번들 | **~250KB** (gzipped) | | PixiJS 180 + Matter.js 30 + GSAP 20 + Howler 7 + Dexie 13 |
+| 예상 번들 | **~240KB** (gzipped) | | PixiJS 180 + Planck.js 20 + GSAP 20 + Howler 7 + Dexie 13 |
 
 ## 디렉토리 구조
 
@@ -53,8 +53,25 @@ src/
 │   ├── BaseScene.ts      # 추상 씬 클래스 (init/update/destroy)
 │   ├── SoundManager.ts   # Howler.js 래퍼
 │   ├── InputManager.ts   # 터치/클릭 통합 입력
-│   ├── PhysicsWorld.ts   # Matter.js 래퍼 (구슬/핀볼 공유)
+│   ├── PhysicsWorld.ts   # Planck.js 래퍼 (구슬/핀볼 공유)
+│   ├── CameraController.ts # 구슬 레이스 카메라 (group/leader/free 모드)
 │   └── RecordManager.ts  # Dexie.js 게임 기록 관리 (IndexedDB)
+│
+├── maps/                  # 트랙 맵 시스템 (구슬 레이스 V3)
+│   ├── TrackData.ts       # V3 트랙 레이아웃 데이터 (28개 세그먼트)
+│   ├── TrackBuilder.ts    # 세그먼트 빌드 + 연결 검증 파이프라인
+│   ├── MarbleProgress.ts  # 체크포인트 기반 실시간 진행도 추적
+│   ├── types.ts           # SegmentPort, TrackLayout 타입
+│   └── segments/          # 세그먼트 구현 (14종)
+│       ├── BaseSegment.ts      # 추상 기반 (getEntry/getExit 포트)
+│       ├── ChannelRampSegment.ts  # 밀폐 경사 채널 (noCeiling 옵션)
+│       ├── CurvedChannelSegment.ts # 호형 U턴 채널
+│       ├── FunnelSegment.ts     # 깔때기 (V자 수렴)
+│       ├── WheelLiftSegment.ts  # 물레방아 상승 장치
+│       ├── SpiralSegment.ts     # 나선 하강
+│       ├── WindmillSegment.ts   # 풍차 회전 장애물
+│       ├── SeesawSegment.ts     # 시소
+│       └── ...                  # +6종 (Ramp, Splitter, Bottleneck 등)
 │
 ├── scenes/               # 씬(화면) 단위
 │   ├── MainMenuScene.ts  # 메인 화면 (모드 선택 + 이름 입력)
@@ -67,7 +84,7 @@ src/
 │
 ├── entities/             # 게임 오브젝트
 │   ├── Horse.ts          # 말 엔티티 (갤럽 애니메이션, SeededRandom 속도)
-│   └── Marble.ts         # 구슬 엔티티 (Matter.js body + PixiJS 동기화)
+│   └── Marble.ts         # 구슬 엔티티 (Planck.js body + PixiJS 동기화, finished/retired 상태)
 │
 ├── effects/              # 연출/이펙트
 │   ├── CountdownEffect.ts  # 3-2-1-출발 카운트다운
@@ -83,7 +100,8 @@ src/
 │   ├── NameInput.ts        # 참가자 이름 입력 (HTML overlay, IME 지원)
 │   ├── DotGridBackground.ts  # 도트 그리드 배경 패널
 │   ├── SectionLabel.ts      # 섹션 라벨 (좌측 바 + 텍스트)
-│   └── StatsPanel.ts        # 전적 통계 패널 (ResultScene)
+│   ├── StatsPanel.ts        # 전적 통계 패널 (ResultScene)
+│   └── MiniMap.ts           # 구슬 레이스 미니맵 (뷰포트 + 구슬 위치)
 │
 └── utils/                # 유틸리티
     ├── random.ts         # 시드 기반 랜덤 (재현성/공정성)
@@ -101,6 +119,7 @@ src/
 | `@entities/*` | `src/entities/*` |
 | `@effects/*` | `src/effects/*` |
 | `@ui/*` | `src/ui/*` |
+| `@maps/*` | `src/maps/*` |
 | `@utils/*` | `src/utils/*` |
 
 ## 씬 전환 흐름
@@ -144,10 +163,10 @@ src/
 - [x] Neon Game Show 디자인 테마 적용
 
 ### Phase 2: 물리 모드 추가 ✅
-- [x] PhysicsWorld.ts (Matter.js 래퍼 — 고정 timestep, 이벤트 핸들러, 센서 지원)
-- [x] MarbleRaceScene (지그재그 물리 트랙 + 구슬 충돌 + 피니시 센서)
+- [x] PhysicsWorld.ts (Planck.js 래퍼 — 4 sub-step CCD, bullet body, 센서 지원)
+- [x] MarbleRaceScene (V3 어드벤처 코스 + 체크포인트 순위 + 완주 기반 종료)
 - [x] PachinkoScene (핀 격자 10×12 + 슬롯 센서 + 순위 결정)
-- [x] Marble 엔티티 (Matter.js body ↔ PixiJS Container 동기화)
+- [x] Marble 엔티티 (Planck.js body ↔ PixiJS Container 동기화, 더미 구슬 지원)
 - [x] 공통 이펙트 시스템 (슬로우모션, 화면 흔들림, 카오스 이벤트)
 
 ### Phase 3: 사다리 + 연출 강화 ✅
@@ -161,7 +180,11 @@ src/
 - [x] StatsPanel — ResultScene 전적 통계 UI
 - [x] 베팅 시스템 제거 — BettingManager / BettingPanel / BettingResultPanel 삭제
 - [x] 경마: 오벌 트랙 재설계 (흙/잔디 텍스처, 출발 게이트, 레인 번호) + wipeout/nitro/reverse 랜덤 이벤트 시스템 + 진행도 기반 페이즈 전환 + 순위 패널 UI
-- [x] 구슬 레이스: 첫 번째 경로 멈춤 버그 수정
+- [x] 구슬 레이스 V3 어드벤처 코스 전면 리디자인 — 7개 구간 28개 세그먼트 + 체크포인트 진행도
+- [x] Planck.js 물리엔진 마이그레이션 (Matter.js → Planck.js)
+- [x] SegmentPort 인터페이스 + validateConnections 연결 검증 파이프라인
+- [x] Stuck Detection 위치변위 감지 + 전진 리포지션 개선
+- [x] 구간별 구조물 매칭 검증 단위테스트 (Playwright, 5/5 PASS)
 - [ ] 사다리타기: 복잡한 구조 + 카오스 이벤트 시스템
 - [ ] 파친코: 함정/변수 추가 + 단일 골 구조 + 공 개수 설정
 - [ ] NetworkManager — Supabase Realtime 호스트-게스트 실시간 통신
@@ -189,7 +212,7 @@ src/
 
 ### 기술 제약
 - PixiJS v8: `new Application()` + `await app.init({...})` — 생성자에 옵션 전달 금지
-- Matter.js 직접 사용 금지 → `PhysicsWorld.ts` 래퍼를 통해서만
+- Planck.js 직접 사용 금지 → `PhysicsWorld.ts` 래퍼를 통해서만
 - Canvas 내 텍스트 입력 금지 → HTML input overlay (한글 IME 이슈)
 - `any` 타입 사용 금지, `strict: true` 필수
 - React/Vue 등 프레임워크 도입 금지
@@ -197,7 +220,7 @@ src/
 ### 리스크
 | 리스크 | 심각도 | 대응 |
 |---|---|---|
-| Matter.js 유지보수 정체 (2024-06~) | 중 | PhysicsWorld 래퍼로 추상화, Planck.js 폴백 대비 |
+| ~~Matter.js 유지보수 정체~~ | ~~중~~ | ~~해결: Planck.js로 전환 완료 (2026-03-27)~~ |
 | 4모드 동시 개발 스코프 과다 | 높 | 경마부터 구현, 모드별 점진적 추가 |
 | 사다리타기 30초 부족 | 중 | "빠른 추첨" 모드로 포지셔닝, 연출로 ~20초 확장 |
 
@@ -221,6 +244,7 @@ bash verify.sh
 
 | 날짜 | 분류 | 증상 | 원인 | 해결 |
 |---|---|---|---|---|
+| 2026-03-28 | 버그 수정 | V3 트랙 전 구간에서 구슬 끼임 (완주 불가) | ChannelRampSegment `signedAngle = -angle * direction` 부호 반전으로 경사 방향이 설계와 반대 | `signedAngle = angle * direction`으로 수정 + noCeiling 옵션 + CurvedChannel 가이드벽 제거 + SEC4 출구 재정렬. 10명×10회 반복 100% 완주 달성 |
 | 2026-03-24 | 버그 수정 | 구슬 레이스 첫 경로에서 구슬 전체 막힘 | 경사로 각도 부호 오류 — `angle = TRACK.rampAngle * direction`으로 구슬이 벽과 경사로 사이 10px 틈으로 몰림 (구슬 지름 16px) | `angle = -TRACK.rampAngle * direction`으로 수정, 40px 출구 방향으로 흘러내리도록 변경 |
 | 2026-03-22 | 제거 | 베팅 시스템 오버엔지니어링 | 게임 목적(관람형 뽑기)과 불일치, 코드 복잡도 증가 | BettingManager / BettingPanel / BettingResultPanel 전체 삭제 |
 

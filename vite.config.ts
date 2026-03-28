@@ -11,6 +11,7 @@ export default defineConfig({
       '@effects': resolve(__dirname, 'src/effects'),
       '@ui': resolve(__dirname, 'src/ui'),
       '@utils': resolve(__dirname, 'src/utils'),
+      '@maps': resolve(__dirname, 'src/maps'),
     },
   },
   server: {
