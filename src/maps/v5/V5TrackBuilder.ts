@@ -381,50 +381,117 @@ export class V5TrackBuilder {
   // ════════════════════════════════════════════════════════════════
   private buildSEC1(): void {
     // ── 구간A: 깔때기 ─────────────────────────────
-    // 출구 폭 240px (x:920~1160), 하단 y=300
-    this.createFloor(600, 80, 920, 300, 0x3366ff);    // 좌측 경사벽
-    this.createFloor(1480, 80, 1160, 300, 0x3366ff);  // 우측 경사벽
+    // 출구 폭 120px (x:980~1100), 하단 y=300 — SEC2 curveA 입구와 정확히 일치
+    this.createFloor(600, 80, 980, 300, 0x3366ff);    // 좌측 경사벽
+    this.createFloor(1480, 80, 1100, 300, 0x3366ff);  // 우측 경사벽
 
-    // ── 구간B: 핀존 ───────────────────────────────
-    // 좌우벽: 깔때기 하단(y=300) ~ 핀존 하단(y=380)
-    this.createWall(920, 300, 380);    // 좌벽: x=920, y=300~380
-    this.createWall(1160, 300, 380);   // 우벽: x=1160, y=300~380
+    // ── 구간B: 핀존 좌우 경계벽 ─────────────────────
+    this.createWall(980, 300, 380);    // 좌벽: x=980, y=300~380
+    this.createWall(1100, 300, 380);   // 우벽: x=1100, y=300~380
 
-    // 핀 12개 (간격 52px, r=8 — 4/4/4 배치)
-    this.createPin(960, 320, 8);    // 1행
-    this.createPin(1012, 320, 8);
+    // 핀 (r=8, 안전 구역 x=988~1092)
+    this.createPin(1012, 320, 8);    // 1행
     this.createPin(1064, 320, 8);
-    this.createPin(1116, 320, 8);
-    this.createPin(986, 347, 8);    // 2행 (오프셋)
-    this.createPin(1038, 347, 8);
+    this.createPin(1038, 347, 8);    // 2행 (오프셋)
     this.createPin(1090, 347, 8);
-    this.createPin(1142, 347, 8);
-    this.createPin(960, 374, 8);    // 3행
-    this.createPin(1012, 374, 8);
+    this.createPin(1012, 374, 8);    // 3행
     this.createPin(1064, 374, 8);
-    this.createPin(1116, 374, 8);
 
     // ── 구간C: 수직 통로 → SEC2 자유낙하 ──────────
-    // 좌벽 x=920, 우벽 x=1160, y=380~470, 하단 열림
-    this.createPipe(1040, 380, 1040, 470, { direction: 'vertical', gap: 240 });
+    // center x=1040, gap=120 → 좌벽=980, 우벽=1100, 하단 y=470
+    this.createPipe(1040, 380, 1040, 470, { direction: 'vertical', gap: 120 });
 
+    // 구간C 파이프 내부 핀 (4~5행)
+    this.createPin(1038, 401, 8);
+    this.createPin(1090, 401, 8);
+    this.createPin(1012, 428, 8);
+    this.createPin(1064, 428, 8);
     // Section 1 sensor
-    this.createSectionSensor(1040, 350, 240, 120, 'sec1');
+    this.createSectionSensor(1040, 350, 120, 120, 'sec1');
   }
 
   // ════════════════════════════════════════════════════════════════
-  // SEC 2: S-채널 3단 (Y: 370 → 770)
+  // SEC 2: S-채널 3단 (Y: 470 → ~840)
+  //   커브A → CH1 우하향 → 커브B → CH2 좌하향 → 커브C → CH3 우하향
   // ════════════════════════════════════════════════════════════════
   private buildSEC2(): void {
-    // SEC2: 단일 경사로 (캐치벽 없음) — 9개 마블 동시 통과
-    // (900,350) → (1775,770): 플링코 중앙 위에서 끝남
-    // 마블이 경사 끝에서 자연 비행 → SEC3 플링코 우측벽 충돌 → 플링코 진입
-    this.createFloor(900, 350, 1775, 770, 0x336633);
-    this.createWall(900, 300, 780);        // 좌측 경계벽
+    const GAP   = 120;    // 파이프 내부 폭 (구슬 지름 20px × 6 여유)
+    const R     = 80;     // U턴 반지름
+    const color = 0x33aa33;
 
-    // sec2 센서: x=1100, 마블 중심 y≈434
-    // (1100에서 y_floor=446, surface=443, marble_center=443-cos(25°)*10≈434)
-    this.createSectionSensor(1100, 434, 200, 40, 'sec2');
+    // ── 커브A: SEC1 수직 파이프 하단 → CH1 우향 전환 ──────────────
+    // SEC1 수직 파이프: center=(1040, 380~470), 하단 y=470
+    // 커브A 중심: SEC1 center x + R, SEC1 bottom y = (1040+R, 470)
+    const cAcx = 1040 + R;        // = 1120
+    const cAcy = 470;
+
+    // arcStart=π (좌측 = SEC1 파이프 중심선), arcEnd=π/2 (하단 = CH1 시작)
+    this.createPipe(cAcx, cAcy, 0, 0, {
+      direction: 'curve',
+      arcRadius: R,
+      arcStart: Math.PI,
+      arcEnd: Math.PI / 2,
+      gap: GAP,
+      color,
+    });
+
+    // ── CH1: 우하향 (커브A 출구 → 우측 월드 끝) ──────────────────
+    // 커브A 출구: (cAcx + R*cos(π/2), cAcy + R*sin(π/2)) = (1120, 550)
+    const ch1X1 = cAcx + R * Math.cos(Math.PI / 2);  // = 1120
+    const ch1Y1 = cAcy + R * Math.sin(Math.PI / 2);  // = 550
+    const ch1X2 = 2080;
+    const ch1Y2 = ch1Y1 + (ch1X2 - ch1X1) * Math.tan(0.03);
+
+    this.createPipe(ch1X1, ch1Y1, ch1X2, ch1Y2, { direction: 'angled', gap: GAP, color });
+
+    // ── 커브B: CH1 끝점 → CH2 시작점 (우측 CW U턴) ───────────────
+    const t1     = Math.atan2(ch1Y2 - ch1Y1, ch1X2 - ch1X1);
+    const bCx    = ch1X2 - Math.sin(t1) * R;
+    const bCy    = ch1Y2 + Math.cos(t1) * R;
+    const bStart = Math.atan2(ch1Y2 - bCy, ch1X2 - bCx);
+    const bEnd   = bStart + Math.PI;
+
+    this.createPipe(bCx, bCy, 0, 0, {
+      direction: 'curve', arcRadius: R,
+      arcStart: bStart, arcEnd: bEnd,
+      gap: GAP, color,
+    });
+
+    // ── CH2: 좌하향 ────────────────────────────────────────────────
+    const ch2X1 = bCx + R * Math.cos(bEnd);
+    const ch2Y1 = bCy + R * Math.sin(bEnd);
+    const ch2X2 = 150;
+    const ch2Y2 = ch2Y1 + (ch2X1 - ch2X2) * Math.tan(0.03);
+
+    this.createPipe(ch2X1, ch2Y1, ch2X2, ch2Y2, { direction: 'angled', gap: GAP, color });
+
+    // ── 커브C: CH2 끝점 → CH3 시작점 (좌측 CCW U턴) ──────────────
+    const t2     = Math.atan2(ch2Y2 - ch2Y1, ch2X2 - ch2X1);
+    const cCx    = ch2X2 + Math.sin(t2) * R;
+    const cCy    = ch2Y2 - Math.cos(t2) * R;
+    const cStart = Math.atan2(ch2Y2 - cCy, ch2X2 - cCx);
+    const cEnd   = cStart - Math.PI;
+
+    this.createPipe(cCx, cCy, 0, 0, {
+      direction: 'curve', arcRadius: R,
+      arcStart: cStart, arcEnd: cEnd,
+      gap: GAP, color,
+    });
+
+    // ── CH3: 우하향 → SEC3 진입 ───────────────────────────────────
+    const ch3X1 = cCx + R * Math.cos(cEnd);
+    const ch3Y1 = cCy + R * Math.sin(cEnd);
+    const ch3X2 = 1750;
+    const ch3Y2 = ch3Y1 + (ch3X2 - ch3X1) * Math.tan(0.05);
+
+    this.createPipe(ch3X1, ch3Y1, ch3X2, ch3Y2, { direction: 'angled', gap: GAP, color });
+
+    // ── SEC2 센서: CH1 중간 지점 ───────────────────────────────────
+    this.createSectionSensor(
+      (ch1X1 + ch1X2) / 2,
+      (ch1Y1 + ch1Y2) / 2,
+      200, 40, 'sec2',
+    );
   }
 
   // ════════════════════════════════════════════════════════════════
