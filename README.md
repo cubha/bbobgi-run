@@ -23,7 +23,7 @@
 | # | 모드 | 특성 | 물리엔진 | 시간 |
 |---|---|---|---|---|
 | 1 | **경마 (Horse Racing)** | 횡스크롤 레이스, 랜덤 속도 변화 | 불필요 | 30초 |
-| 2 | **구슬 레이스 (Marble Race)** | V3 어드벤처 코스 — 깔때기→채널→U턴→물레방아→나선→장애물→스프린트 | Planck.js | 완주 기반 |
+| 2 | **구슬 레이스 (Marble Race)** | V5 어드벤처 코스 — 깔때기(SEC1)→플링코(SEC2-3)→분기FAST/SAFE(SEC4)→물레방아(SEC5)→카오스(SEC6)→분기VORTEX/SPRINT(SEC7)→파이널(SEC8) | Planck.js | 완주 기반 |
 | 3 | **사다리타기** | 자동 생성 사다리, 라인 애니메이션 | 불필요 | ~20초 |
 | 4 | **핀볼/파친코 (Pachinko)** | 공이 핀에 부딪히며 하강 | Planck.js | 20~30초 |
 
@@ -57,21 +57,9 @@ src/
 │   ├── CameraController.ts # 구슬 레이스 카메라 (group/leader/free 모드)
 │   └── RecordManager.ts  # Dexie.js 게임 기록 관리 (IndexedDB)
 │
-├── maps/                  # 트랙 맵 시스템 (구슬 레이스 V3)
-│   ├── TrackData.ts       # V3 트랙 레이아웃 데이터 (28개 세그먼트)
-│   ├── TrackBuilder.ts    # 세그먼트 빌드 + 연결 검증 파이프라인
-│   ├── MarbleProgress.ts  # 체크포인트 기반 실시간 진행도 추적
-│   ├── types.ts           # SegmentPort, TrackLayout 타입
-│   └── segments/          # 세그먼트 구현 (14종)
-│       ├── BaseSegment.ts      # 추상 기반 (getEntry/getExit 포트)
-│       ├── ChannelRampSegment.ts  # 밀폐 경사 채널 (noCeiling 옵션)
-│       ├── CurvedChannelSegment.ts # 호형 U턴 채널
-│       ├── FunnelSegment.ts     # 깔때기 (V자 수렴)
-│       ├── WheelLiftSegment.ts  # 물레방아 상승 장치
-│       ├── SpiralSegment.ts     # 나선 하강
-│       ├── WindmillSegment.ts   # 풍차 회전 장애물
-│       ├── SeesawSegment.ts     # 시소
-│       └── ...                  # +6종 (Ramp, Splitter, Bottleneck 등)
+├── maps/                  # 트랙 맵 시스템
+│   └── v5/                # 구슬 레이스 V5 어드벤처 코스
+│       └── V5TrackBuilder.ts  # 좌표 기반 트랙 빌더 (createPipe/createPin/createWall, 8구간)
 │
 ├── scenes/               # 씬(화면) 단위
 │   ├── MainMenuScene.ts  # 메인 화면 (모드 선택 + 이름 입력)
@@ -185,6 +173,9 @@ src/
 - [x] SegmentPort 인터페이스 + validateConnections 연결 검증 파이프라인
 - [x] Stuck Detection 위치변위 감지 + 전진 리포지션 개선
 - [x] 구간별 구조물 매칭 검증 단위테스트 (Playwright, 5/5 PASS)
+- [x] 구슬 레이스 V5 좌표 기반 트랙 빌더 (V5TrackBuilder) — 8구간 어드벤처, 분기 2회, 카오스존
+- [x] `createPipe` 통합 API — `direction: 'angled' | 'vertical' | 'curve'` + `color` prop
+- [x] SEC1 깔때기+핀존 구현 (깔때기 수렴 → 12핀 격자 → 수직 통로)
 - [ ] 사다리타기: 복잡한 구조 + 카오스 이벤트 시스템
 - [ ] 파친코: 함정/변수 추가 + 단일 골 구조 + 공 개수 설정
 - [ ] NetworkManager — Supabase Realtime 호스트-게스트 실시간 통신
