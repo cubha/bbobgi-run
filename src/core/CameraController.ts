@@ -56,6 +56,12 @@ export class CameraController {
   get mode(): CameraMode { return this._mode; }
   get zoom(): number { return this._zoom; }
 
+  /** 줌 레벨을 즉시 설정 — 초기화·테스트용 */
+  setZoom(z: number): void {
+    this._zoom = Math.max(CameraController.MIN_ZOOM, Math.min(CameraController.MAX_ZOOM, z));
+    this.applyPosition();
+  }
+
   /** 카메라 위치를 즉시 설정 (lerp 없이) — 초기화용 */
   setPosition(x: number, y: number): void {
     this.currentX = x;
