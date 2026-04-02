@@ -76,19 +76,14 @@ export class CountdownEffect {
       this.container.addChild(text);
 
       this.timeline!
-        .set([ring, text], { alpha: 0, pixi: { scaleX: 1.8, scaleY: 1.8 } })
-        .to([ring, text], {
-          alpha: 1,
-          pixi: { scaleX: 1, scaleY: 1 },
-          duration: 0.35,
-          ease: 'back.out(1.5)',
+        .call(() => {
+          ring.alpha = 0; ring.scale.set(1.8);
+          text.alpha = 0; text.scale.set(1.8);
         })
-        .to([ring, text], {
-          alpha: 0,
-          pixi: { scaleX: 0.7, scaleY: 0.7 },
-          duration: 0.4,
-          ease: 'power2.in',
-        }, '+=0.2');
+        .to([ring, text], { alpha: 1, duration: 0.35, ease: 'back.out(1.5)' })
+        .to([ring.scale, text.scale], { x: 1, y: 1, duration: 0.35, ease: 'back.out(1.5)' }, '<')
+        .to([ring, text], { alpha: 0, duration: 0.4, ease: 'power2.in' }, '+=0.2')
+        .to([ring.scale, text.scale], { x: 0.7, y: 0.7, duration: 0.4, ease: 'power2.in' }, '<');
     });
 
     // GO text — dot-style square ring
@@ -118,18 +113,15 @@ export class CountdownEffect {
     this.container.addChild(goText);
 
     this.timeline
-      .set([goRing, goText], { alpha: 0 })
-      .set(goText, { pixi: { scaleX: 0.5, scaleY: 0.5 } })
+      .call(() => { goRing.alpha = 0; goText.alpha = 0; goText.scale.set(0.5); })
       .to([goRing, goText], { alpha: 1, duration: 0.05, ease: 'none' })
-      .to(goText, { pixi: { scaleX: 1.3, scaleY: 1.3 }, duration: 0.45, ease: 'back.out(1.5)' }, '<')
+      .to(goText.scale, { x: 1.3, y: 1.3, duration: 0.45, ease: 'back.out(1.5)' }, '<')
       .to([goRing, goText], { alpha: 0, duration: 0.3, ease: 'power2.in' })
       .to(overlay, { alpha: 0, duration: 0.25 }, '<');
   }
 
   private removeContainer(): void {
-    if (this.container.parent) {
-      this.container.parent.removeChild(this.container);
-    }
+    this.container.removeFromParent();
   }
 
   destroy(): void {

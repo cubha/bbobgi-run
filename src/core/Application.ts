@@ -85,6 +85,6 @@ export class GameApplication {
   destroy(): void {
     this.input.destroy();
     this.sound.stopAll();
-    this.pixi.destroy(true, { children: true });
+    this.pixi.destroy({ removeView: true });
   }
 }

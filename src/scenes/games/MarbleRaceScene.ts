@@ -1,6 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { BaseScene } from '@core/BaseScene';
-import { PhysicsWorld, Vec2, type Body, type Contact } from '@core/PhysicsWorld';
+import { PhysicsWorld, Vec2, type Contact } from '@core/PhysicsWorld';
 import { CameraController } from '@core/CameraController';
 import { Marble, resetDummyColorIndex } from '@entities/Marble';
 import { V5TrackBuilder, V5_WORLD_W, V5_WORLD_H, V5_START_Y, V5_FINISH_Y, V5_MARBLE_RADIUS, V5_MARBLE_STARTS } from '@maps/v5/V5TrackBuilder';
@@ -8,7 +8,6 @@ import { MIN_MARBLES, DUMMY_SYMBOLS } from '@maps/TrackData';
 import { CountdownEffect } from '@effects/CountdownEffect';
 import { SlowMotionEffect } from '@effects/SlowMotionEffect';
 import { ShakeEffect } from '@effects/ShakeEffect';
-import { ChaosEffect } from '@effects/ChaosEffect';
 import { MiniMap } from '@ui/MiniMap';
 import type { GameConfig, GameResult, Player, RankingEntry } from '@/types';
 import {
@@ -16,13 +15,11 @@ import {
   DESIGN_HEIGHT,
   COLORS,
   COUNTDOWN_SEC,
-  CHAOS_SEC,
-  TENSION_SEC,
   FONT_DISPLAY,
 } from '@utils/constants';
 import type { ScaleInfo } from '@utils/responsive';
 
-type RacePhase = 'countdown' | 'racing' | 'chaos' | 'tension' | 'slowmo' | 'done';
+type RacePhase = 'countdown' | 'racing' | 'slowmo' | 'done';
 
 /** 정체 감지 상수 */
 const STUCK_WARN_SEC = 3;      // 3초 정체 시 경고 로그
@@ -31,10 +28,8 @@ const STUCK_IMPULSE_SEC = 5;   // 5초 정체 시 impulse
 /** 구슬 최대 속도 (px/s — Planck.js 스케일) */
 const MAX_MARBLE_SPEED = 1800;
 
-/** Pre-chaos event triggers (seconds after racing phase starts) */
+/** Race event triggers (seconds after racing phase starts) */
 const RACE_EVT = { lastBooster: 8, leadLightning: 16 } as const;
-/** Post-chaos event triggers (seconds after chaos starts) */
-const CHAOS_EVT = { lastBooster: 4, leadLightning: 7 } as const;
 
 /**
  * Marble Race game scene — V5 대형 맵 (2200×2900px)
@@ -56,7 +51,6 @@ export class MarbleRaceScene extends BaseScene {
   private countdown: CountdownEffect | null = null;
   private slowMo: SlowMotionEffect | null = null;
   private readonly shaker = new ShakeEffect();
-  private chaos: ChaosEffect | null = null;
 
   private readonly worldContainer = new Container();
   private readonly marbleContainer = new Container();
@@ -66,17 +60,12 @@ export class MarbleRaceScene extends BaseScene {
   private timerBar: Graphics | null = null;
   private phaseLabel: Text | null = null;
   private miniMap: MiniMap | null = null;
-  private chaosApplied = false;
-  private chaosObstacles: Body[] = [];
   private prevRankIds: number[] = [];
 
   // ─── Event system ─────────────────────────────
-  private chaosStartTime = 0;
   private readonly eventsFired = {
     lastBooster: false,
     leadLightning: false,
-    postChaosBooster: false,
-    postChaosLightning: false,
   };
   private readonly flashes: Array<{ gfx: Graphics; framesLeft: number; total: number }> = [];
 
@@ -178,12 +167,6 @@ export class MarbleRaceScene extends BaseScene {
       && this.uniqueFinishedPlayerCount() >= playerCount - 1;
     if (this.phase !== 'slowmo' && lastPickSlowmo) {
       this.enterSlowmo();
-    } else if (this.phase === 'chaos' && this.totalElapsed >= TENSION_SEC) {
-      this.phase = 'tension';
-      this.setPhaseLabel('');
-      this.removeChaosObstacles();
-    } else if (!this.chaosApplied && this.totalElapsed >= CHAOS_SEC) {
-      this.applyChaos();
     }
 
     this.tickEvents();
@@ -340,7 +323,6 @@ export class MarbleRaceScene extends BaseScene {
 
     this.countdown?.destroy();
     this.slowMo?.destroy();
-    this.chaos?.destroy();
     this.trackBuilder?.destroy();
     this.trackBuilder = null;
     this.physics?.destroy();
@@ -578,17 +560,6 @@ export class MarbleRaceScene extends BaseScene {
       if (Math.random() < 0.3) this.fireLeadLightning();
     }
 
-    if (this.chaosApplied && this.chaosStartTime > 0) {
-      const chaosElapsed = this.totalElapsed - this.chaosStartTime;
-      if (!this.eventsFired.postChaosBooster && chaosElapsed >= CHAOS_EVT.lastBooster) {
-        this.eventsFired.postChaosBooster = true;
-        if (Math.random() < 0.7) this.fireLastBooster();
-      }
-      if (!this.eventsFired.postChaosLightning && chaosElapsed >= CHAOS_EVT.leadLightning) {
-        this.eventsFired.postChaosLightning = true;
-        if (Math.random() < 0.6) this.fireLeadLightning();
-      }
-    }
   }
 
   private fireLastBooster(): void {
@@ -624,32 +595,6 @@ export class MarbleRaceScene extends BaseScene {
     this.shaker.shake(this.worldContainer, 4, 5);
   }
 
-  private fireExplosion(): void {
-    if (!this.camera) return;
-    const center = this.camera.getCenter();
-
-    for (const marble of this.marbles) {
-      if (marble.finished) continue;
-      const pos = marble.body.getPosition();
-      const dx = pos.x - center.x;
-      const dy = pos.y - center.y;
-      const dist = Math.max(10, Math.sqrt(dx * dx + dy * dy));
-      const force = Math.min(5, 12 / dist);
-      marble.body.applyForce(
-        new Vec2(dx * force, dy * force),
-        pos,
-        true,
-      );
-    }
-
-    const flash = new Graphics();
-    flash.rect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
-    flash.fill({ color: COLORS.primary, alpha: 0.35 });
-    this.hudContainer.addChild(flash);
-    this.flashes.push({ gfx: flash, framesLeft: 12, total: 12 });
-
-    this.shaker.shake(this.container, 8, 8);
-  }
 
   private spawnWorldFlash(x: number, y: number, color: number, frames: number): void {
     const g = new Graphics();
@@ -684,69 +629,6 @@ export class MarbleRaceScene extends BaseScene {
       this.totalElapsed = COUNTDOWN_SEC;
       this.sound?.play('race-start');
     });
-  }
-
-  private applyChaos(): void {
-    if (!this.physics || !this.camera) return;
-    this.chaosApplied = true;
-    this.chaosStartTime = this.totalElapsed;
-    this.phase = 'chaos';
-    this.setPhaseLabel('💥 카오스!');
-    this.sound?.play('chaos');
-
-    this.chaos = new ChaosEffect();
-    this.chaos.play(this.hudContainer, 25);
-    this.shaker.shake(this.worldContainer, 5, 6);
-
-    if (Math.random() < 0.5) {
-      const dir = Math.random() < 0.5 ? 1 : -1;
-      this.physics.setGravity(dir * 300, 980);
-      this.pendingTimers.push(setTimeout(() => {
-        if (this.physics && this.phase !== 'done') this.physics.setGravity(0, 980);
-      }, 600));
-    } else {
-      this.fireExplosion();
-
-      const center = this.camera.getCenter();
-      const obstPositions = [
-        { x: center.x - 120, y: center.y - 100, angle: 0.5 },
-        { x: center.x + 120, y: center.y - 50,  angle: -0.5 },
-        { x: center.x - 60,  y: center.y + 80,  angle: 0.3 },
-        { x: center.x + 60,  y: center.y + 150, angle: -0.3 },
-      ];
-
-      for (const pos of obstPositions) {
-        const body = this.physics.createWall(pos.x, pos.y, 100, 12, {
-          angle: pos.angle,
-          restitution: 0.8,
-        });
-        this.chaosObstacles.push(body);
-
-        const g = new Graphics();
-        g.rect(-50, -6, 100, 12);
-        g.fill({ color: COLORS.primary, alpha: 0.7 });
-        g.position.set(pos.x, pos.y);
-        g.rotation = pos.angle;
-        g.label = `chaos-obstacle-${this.chaosObstacles.length - 1}`;
-        this.worldContainer.addChild(g);
-      }
-    }
-  }
-
-  private removeChaosObstacles(): void {
-    if (!this.physics) return;
-    this.physics.setGravity(0, 980);
-
-    for (const body of this.chaosObstacles) this.physics.removeBodies(body);
-    this.chaosObstacles = [];
-
-    const toRemove = this.worldContainer.children.filter(
-      (c) => typeof c.label === 'string' && c.label.startsWith('chaos-obstacle'),
-    );
-    for (const child of toRemove) {
-      this.worldContainer.removeChild(child);
-      child.destroy();
-    }
   }
 
   private enterSlowmo(): void {

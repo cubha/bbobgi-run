@@ -7,8 +7,10 @@ export class ChaosEffect {
   private tween: gsap.core.Tween | null = null;
   private glitch: GlitchFilter | null = null;
   private glitchTimer: ReturnType<typeof setTimeout> | null = null;
+  private _parent: Container | null = null;
 
   play(parent: Container, y: number): void {
+    this._parent = parent;
     const chaosText = new Text({
       text: '💥 카오스!',
       style: {
@@ -27,7 +29,7 @@ export class ChaosEffect {
     this.glitch = new GlitchFilter({ slices: 10, offset: 5 });
     parent.filters = [this.glitch];
     this.glitchTimer = setTimeout(() => {
-      parent.filters = [];
+      parent.filters = null;
       this.glitch = null;
     }, 500);
 
@@ -37,7 +39,7 @@ export class ChaosEffect {
       duration: 2.2,
       ease: 'power2.out',
       onComplete: () => {
-        if (chaosText.parent) chaosText.parent.removeChild(chaosText);
+        chaosText.removeFromParent();
       },
     });
   }
@@ -51,6 +53,11 @@ export class ChaosEffect {
       clearTimeout(this.glitchTimer);
       this.glitchTimer = null;
     }
+    // GlitchFilter가 parent에 남아있으면 제거
+    if (this.glitch && this._parent) {
+      this._parent.filters = (this._parent.filters ?? []).filter(f => f !== this.glitch);
+    }
     this.glitch = null;
+    this._parent = null;
   }
 }

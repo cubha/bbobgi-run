@@ -28,3 +28,12 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Playwright
+.playwright-mcp/
+
+# Documentation
+docs/
+
+# imgs
+screenshots/

@@ -300,13 +300,13 @@ export class LadderScene extends BaseScene {
     timerFill.fill({ color: COLORS.gold, alpha: 0.9 });
     this.container.addChild(timerFill);
 
-    gsap.to(timerFill, {
-      pixi: { scaleX: 0 },
-      transformOrigin: 'left center',
+    gsap.to(timerFill.scale, {
+      x: 0,
       duration: TRACE_SEC,
       delay: 3.2,
       ease: 'none',
     });
+    timerFill.pivot.x = 0;
 
     const title = new Text({
       text: '사다리타기',
@@ -436,7 +436,15 @@ export class LadderScene extends BaseScene {
     parent.addChild(g);
 
     gsap.to(g, {
-      pixi: { scaleX: 1.35, scaleY: 1.35, alpha: 0.5 },
+      alpha: 0.5,
+      yoyo: true,
+      repeat: -1,
+      duration: 0.8,
+      ease: 'sine.inOut',
+    });
+    gsap.to(g.scale, {
+      x: 1.35,
+      y: 1.35,
       yoyo: true,
       repeat: -1,
       duration: 0.8,
@@ -452,7 +460,15 @@ export class LadderScene extends BaseScene {
     parent.addChild(g);
 
     gsap.to(g, {
-      pixi: { scaleX: 1.25, scaleY: 1.25, alpha: 0.45 },
+      alpha: 0.45,
+      yoyo: true,
+      repeat: -1,
+      duration: 0.5,
+      ease: 'sine.inOut',
+    });
+    gsap.to(g.scale, {
+      x: 1.25,
+      y: 1.25,
       yoyo: true,
       repeat: -1,
       duration: 0.5,
@@ -504,8 +520,8 @@ export class LadderScene extends BaseScene {
     // 0.5s pre-warning blink on the container
     gsap.fromTo(
       ladderContainer,
-      { pixi: { alpha: 0.6 } },
-      { pixi: { alpha: 1 }, yoyo: true, repeat: 3, duration: 0.12, ease: 'none' },
+      { alpha: 0.6 },
+      { alpha: 1, yoyo: true, repeat: 3, duration: 0.12, ease: 'none' },
     );
   }
 
@@ -548,11 +564,10 @@ export class LadderScene extends BaseScene {
           onComplete: () => {
             dot.position.set(to.x, to.y);
             completedPts.push({ x: to.x, y: to.y });
-            gsap.fromTo(
-              dot,
-              { pixi: { scaleX: 2.5, scaleY: 2.5 }, alpha: 0 },
-              { pixi: { scaleX: 1, scaleY: 1 }, alpha: 1, duration: 0.3, ease: 'back.out(2)' },
-            );
+            dot.scale.set(2.5);
+            dot.alpha = 0;
+            gsap.to(dot, { alpha: 1, duration: 0.3, ease: 'back.out(2)' });
+            gsap.to(dot.scale, { x: 1, y: 1, duration: 0.3, ease: 'back.out(2)' });
           },
         });
         continue;
@@ -590,17 +605,15 @@ export class LadderScene extends BaseScene {
           completedPts.push({ x: capTo.x, y: capTo.y });
           if (capRung) {
             // Pulse the rung when crossed
-            gsap.fromTo(
-              capRung,
-              { pixi: { scaleX: 1, scaleY: 1 } },
-              {
-                pixi: { scaleX: 1.5, scaleY: 1.5 },
-                yoyo: true,
-                repeat: 1,
-                duration: 0.15,
-                ease: 'power2.out',
-              },
-            );
+            capRung.scale.set(1);
+            gsap.to(capRung.scale, {
+              x: 1.5,
+              y: 1.5,
+              yoyo: true,
+              repeat: 1,
+              duration: 0.15,
+              ease: 'power2.out',
+            });
           }
         },
       });
@@ -652,11 +665,9 @@ export class LadderScene extends BaseScene {
 
     const tl = gsap.timeline();
     this.timelines.push(tl);
-    tl.to(overlay, { pixi: { alpha: 0.9 }, duration: 0.2 }).to(
-      flash,
-      { alpha: 1, pixi: { scaleX: 1, scaleY: 1 }, duration: 0.4, ease: 'back.out(1.7)' },
-      '<',
-    );
+    tl.to(overlay, { alpha: 0.9, duration: 0.2 })
+      .to(flash, { alpha: 1, duration: 0.4, ease: 'back.out(1.7)' }, '<')
+      .to(flash.scale, { x: 1, y: 1, duration: 0.4, ease: 'back.out(1.7)' }, '<');
   }
 
   // ─── End ──────────────────────────────────────────────────────────────────

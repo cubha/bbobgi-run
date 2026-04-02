@@ -1,4 +1,5 @@
 import { Container } from 'pixi.js';
+import { gsap } from 'gsap';
 import type { SoundManager } from './SoundManager';
 
 /**
@@ -45,6 +46,10 @@ export abstract class BaseScene {
 
   /** Override to clean up resources */
   destroy(): void {
+    // SlowMotionEffect 등이 비정상 종료 시에도 GSAP 타임스케일 복구
+    gsap.globalTimeline.timeScale(1);
     this.container.removeChildren().forEach((child) => child.destroy({ children: true }));
+    // 씬 컨테이너 자체도 파괴하여 GPU 리소스 해제
+    this.container.destroy();
   }
 }
