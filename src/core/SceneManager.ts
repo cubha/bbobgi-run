@@ -16,13 +16,17 @@ export class SceneManager {
   /** Transition to a new scene, destroying the old one */
   async transition(nextScene: BaseScene): Promise<void> {
     if (this.currentScene) {
-      this.currentScene.exit();
       this.stage.removeChild(this.currentScene.container);
+      this.currentScene.exit();
     }
 
     this.currentScene = nextScene;
     this.stage.addChild(nextScene.container);
-    await nextScene.enter();
+    try {
+      await nextScene.enter();
+    } catch (err) {
+      console.error('[SceneManager] Scene init failed:', err);
+    }
   }
 
   /** Called every frame — delegates to current scene */

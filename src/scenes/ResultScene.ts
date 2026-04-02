@@ -54,11 +54,27 @@ export class ResultScene extends BaseScene {
     this.buildBackground(pickMode === 'first');
 
     if (pickMode === 'first') {
-      if (winner) this.buildWinnerSection(winner.player.name);
+      if (winner) this.buildHeroSection({
+        name: winner.player.name,
+        isWin: true,
+        emoji: '🏆',
+        label: '1등 당첨!',
+        subtitle: '축하합니다! 🎉',
+        color: COLORS.gold,
+        headerBg: 0x1a1400,
+      });
       this.buildConfetti();
       this.sound?.play('result-win');
     } else {
-      if (loser) this.buildLoserSection(loser.player.name);
+      if (loser) this.buildHeroSection({
+        name: loser.player.name,
+        isWin: false,
+        emoji: '⚡',
+        label: '꼴등 확정!',
+        subtitle: '당신이 쏩니다! 💸',
+        color: COLORS.primary,
+        headerBg: 0x1a0000,
+      });
       this.sound?.play('result-lose');
     }
 
@@ -101,51 +117,61 @@ export class ResultScene extends BaseScene {
     this.container.addChild(bg.container);
   }
 
-  // ─── Winner Section ───────────────────────────
+  // ─── Hero Section (Winner / Loser 공통) ──────
 
-  private buildWinnerSection(name: string): void {
+  private buildHeroSection(config: {
+    name: string;
+    isWin: boolean;
+    emoji: string;
+    label: string;
+    subtitle: string;
+    color: number;
+    headerBg: number;
+  }): void {
+    const { name, isWin, emoji, label, subtitle, color, headerBg } = config;
+
     const header = new Graphics();
     header.rect(0, 3, DESIGN_WIDTH, 210);
-    header.fill({ color: 0x1a1400 });
+    header.fill({ color: headerBg });
     this.container.addChild(header);
 
-    // Gold radial glow
+    // Radial glow
     for (let i = 3; i >= 1; i--) {
       const glow = new Graphics();
       glow.circle(DESIGN_WIDTH / 2, 80, i * 55);
-      glow.fill({ color: COLORS.gold, alpha: 0.04 });
+      glow.fill({ color, alpha: 0.04 });
       this.container.addChild(glow);
     }
 
-    const trophy = new Text({ text: '🏆', style: { fontSize: 64 } });
-    trophy.anchor.set(0.5);
-    trophy.position.set(DESIGN_WIDTH / 2, 60);
-    trophy.alpha = 0;
-    trophy.scale.set(0.4);
-    this.container.addChild(trophy);
+    const icon = new Text({ text: emoji, style: { fontSize: 64 } });
+    icon.anchor.set(0.5);
+    icon.position.set(DESIGN_WIDTH / 2, 60);
+    icon.alpha = 0;
+    icon.scale.set(0.4);
+    this.container.addChild(icon);
 
-    const winLabel = new Text({
-      text: '1등 당첨!',
+    const labelText = new Text({
+      text: label,
       style: {
         fontFamily: FONT_BODY,
         fontSize: 13,
         fontWeight: '700',
-        fill: COLORS.gold,
+        fill: color,
         letterSpacing: 6,
       },
     });
-    winLabel.anchor.set(0.5);
-    winLabel.position.set(DESIGN_WIDTH / 2, 118);
-    winLabel.alpha = 0;
-    this.container.addChild(winLabel);
+    labelText.anchor.set(0.5);
+    labelText.position.set(DESIGN_WIDTH / 2, 118);
+    labelText.alpha = 0;
+    this.container.addChild(labelText);
 
     const nameText = new Text({
       text: name,
       style: {
         fontFamily: FONT_DISPLAY,
         fontSize: 42,
-        fill: COLORS.gold,
-        dropShadow: { color: COLORS.gold, blur: 0, distance: 2, angle: Math.PI / 2, alpha: 0.7 },
+        fill: color,
+        dropShadow: { color, blur: 0, distance: 2, angle: Math.PI / 2, alpha: 0.7 },
       },
     });
     nameText.anchor.set(0.5);
@@ -154,114 +180,44 @@ export class ResultScene extends BaseScene {
     nameText.scale.set(0.5);
     this.container.addChild(nameText);
 
-    const congrats = new Text({
-      text: '축하합니다! 🎉',
+    const subtitleText = new Text({
+      text: subtitle,
       style: {
         fontFamily: FONT_DISPLAY,
-        fontSize: 18,
+        fontSize: isWin ? 18 : 19,
         fill: COLORS.text,
       },
     });
-    congrats.anchor.set(0.5);
-    congrats.position.set(DESIGN_WIDTH / 2, 208);
-    congrats.alpha = 0;
-    this.container.addChild(congrats);
+    subtitleText.anchor.set(0.5);
+    subtitleText.position.set(DESIGN_WIDTH / 2, 208);
+    subtitleText.alpha = 0;
+    this.container.addChild(subtitleText);
 
     // Staggered entry animations
-    this.tween(trophy, { alpha: 1, pixi: { scaleX: 1, scaleY: 1 }, duration: 0.5, delay: 0.1, ease: 'back.out(1.7)' });
-    this.tween(winLabel, { alpha: 1, duration: 0.4, delay: 0.35 });
-    this.tween(nameText, { alpha: 1, pixi: { scaleX: 1, scaleY: 1 }, duration: 0.55, delay: 0.5, ease: 'back.out(1.7)' });
-    this.tween(congrats, { alpha: 1, duration: 0.4, delay: 0.8 });
+    this.tween(icon, { alpha: 1, duration: isWin ? 0.5 : 0.4, delay: 0.1, ease: 'back.out(1.7)' });
+    this.tween(icon.scale, { x: 1, y: 1, duration: isWin ? 0.5 : 0.4, delay: 0.1, ease: 'back.out(1.7)' });
+    this.tween(labelText, { alpha: 1, duration: isWin ? 0.4 : 0.35, delay: isWin ? 0.35 : 0.3 });
+    this.tween(nameText, { alpha: 1, duration: isWin ? 0.55 : 0.5, delay: isWin ? 0.5 : 0.45, ease: 'back.out(1.7)' });
+    this.tween(nameText.scale, { x: 1, y: 1, duration: isWin ? 0.55 : 0.5, delay: isWin ? 0.5 : 0.45, ease: 'back.out(1.7)' });
+    this.tween(subtitleText, { alpha: 1, duration: 0.4, delay: isWin ? 0.8 : 0.75 });
 
-    // Trophy bounce loop
-    this.tween(trophy, { y: trophy.y - 6, duration: 1.2, delay: 1, repeat: -1, yoyo: true, ease: 'sine.inOut' });
-  }
-
-  // ─── Loser Section ────────────────────────────
-
-  private buildLoserSection(name: string): void {
-    const header = new Graphics();
-    header.rect(0, 3, DESIGN_WIDTH, 210);
-    header.fill({ color: 0x1a0000 });
-    this.container.addChild(header);
-
-    // Red radial glow
-    for (let i = 3; i >= 1; i--) {
-      const glow = new Graphics();
-      glow.circle(DESIGN_WIDTH / 2, 80, i * 55);
-      glow.fill({ color: COLORS.primary, alpha: 0.04 });
-      this.container.addChild(glow);
+    if (isWin) {
+      // Trophy bounce loop
+      this.tween(icon, { y: icon.y - 6, duration: 1.2, delay: 1, repeat: -1, yoyo: true, ease: 'sine.inOut' });
+    } else {
+      // Shake name after reveal
+      this.tween(nameText, {
+        x: `+=${7}`,
+        repeat: 7,
+        yoyo: true,
+        duration: 0.06,
+        delay: 0.9,
+        ease: 'none',
+        onComplete: () => { nameText.x = DESIGN_WIDTH / 2; },
+      });
+      // Lightning flicker
+      this.tween(icon, { alpha: 0.3, duration: 0.15, delay: 0.9, repeat: 5, yoyo: true, ease: 'none' });
     }
-
-    const lightning = new Text({ text: '⚡', style: { fontSize: 64 } });
-    lightning.anchor.set(0.5);
-    lightning.position.set(DESIGN_WIDTH / 2, 60);
-    lightning.alpha = 0;
-    lightning.scale.set(0.4);
-    this.container.addChild(lightning);
-
-    const loseLabel = new Text({
-      text: '꼴등 확정!',
-      style: {
-        fontFamily: FONT_BODY,
-        fontSize: 13,
-        fontWeight: '700',
-        fill: COLORS.primary,
-        letterSpacing: 6,
-      },
-    });
-    loseLabel.anchor.set(0.5);
-    loseLabel.position.set(DESIGN_WIDTH / 2, 118);
-    loseLabel.alpha = 0;
-    this.container.addChild(loseLabel);
-
-    const nameText = new Text({
-      text: name,
-      style: {
-        fontFamily: FONT_DISPLAY,
-        fontSize: 42,
-        fill: COLORS.primary,
-        dropShadow: { color: COLORS.primary, blur: 0, distance: 2, angle: Math.PI / 2, alpha: 0.7 },
-      },
-    });
-    nameText.anchor.set(0.5);
-    nameText.position.set(DESIGN_WIDTH / 2, 163);
-    nameText.alpha = 0;
-    nameText.scale.set(0.5);
-    this.container.addChild(nameText);
-
-    const penalty = new Text({
-      text: '당신이 쏩니다! 💸',
-      style: {
-        fontFamily: FONT_DISPLAY,
-        fontSize: 19,
-        fill: COLORS.text,
-      },
-    });
-    penalty.anchor.set(0.5);
-    penalty.position.set(DESIGN_WIDTH / 2, 208);
-    penalty.alpha = 0;
-    this.container.addChild(penalty);
-
-    // Animations
-    this.tween(lightning, { alpha: 1, pixi: { scaleX: 1, scaleY: 1 }, duration: 0.4, delay: 0.1, ease: 'back.out(1.7)' });
-    this.tween(loseLabel, { alpha: 1, duration: 0.35, delay: 0.3 });
-    this.tween(nameText, { alpha: 1, pixi: { scaleX: 1, scaleY: 1 }, duration: 0.5, delay: 0.45, ease: 'back.out(1.7)' });
-    this.tween(penalty, { alpha: 1, duration: 0.4, delay: 0.75 });
-
-    // Shake name after reveal
-    this.tween(nameText, {
-      x: `+=${7}`,
-      repeat: 7,
-      yoyo: true,
-      duration: 0.06,
-      delay: 0.9,
-      ease: 'none',
-      onComplete: () => { nameText.x = DESIGN_WIDTH / 2; },
-    });
-
-    // Lightning flicker
-    this.tween(lightning, { alpha: 0.3, duration: 0.15, delay: 0.9, repeat: 5, yoyo: true, ease: 'none' });
   }
 
   // ─── Confetti ─────────────────────────────────

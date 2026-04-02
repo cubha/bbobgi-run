@@ -77,6 +77,28 @@ async function main() {
     await app.scenes.transition(scene);
   }
 
+  // Test hook: allow Playwright to start a game directly
+  (window as unknown as Record<string, unknown>).__startGame__ = startGame;
+
+  // Auto-start from URL params: ?mode=marble&players=2
+  const params = new URLSearchParams(window.location.search);
+  const autoMode = params.get('mode') as GameMode | null;
+  const autoPlayers = parseInt(params.get('players') ?? '0', 10);
+  if (autoMode && autoPlayers >= 2) {
+    const players = Array.from({ length: autoPlayers }, (_, i) => ({
+      id: i,
+      name: `P${i + 1}`,
+    }));
+    const pickMode = (params.get('pickMode') as 'first' | 'last') ?? 'first';
+    await startGame({
+      mode: autoMode,
+      pickMode,
+      players,
+      seed: Date.now(),
+    });
+    return;
+  }
+
   // Boot
   await showMenu();
 }

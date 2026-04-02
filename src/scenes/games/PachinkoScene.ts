@@ -146,10 +146,10 @@ export class PachinkoScene extends BaseScene {
     this.startCountdown();
   }
 
-  update(_delta: number): void {
+  update(delta: number): void {
     if (this.phase === 'done' || !this.physics) return;
 
-    const dt = _delta / 60;
+    const dt = delta / 60;
     this.totalElapsed += dt;
 
     if (this.phase === 'countdown') return;
@@ -489,9 +489,6 @@ export class PachinkoScene extends BaseScene {
     this.rankLabel.x = cx;
     this.rankLabel.y = BOARD.goalY + 20;
     this.boardContainer.addChild(this.rankLabel);
-
-    // Unused variable suppression
-    void boardWidth;
   }
 
   private createBalls(cx: number): void {

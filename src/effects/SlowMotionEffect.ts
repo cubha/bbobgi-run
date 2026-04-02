@@ -49,16 +49,14 @@ export class SlowMotionEffect {
       this.tween = null;
     }
 
-    // RGBSplit 제거
+    // RGBSplit만 제거 (다른 필터는 보존)
     if (this.rgbSplit) {
-      this.parent.filters = null;
+      this.parent.filters = (this.parent.filters ?? []).filter(f => f !== this.rgbSplit);
       this.rgbSplit = null;
     }
 
     if (this.vignette) {
-      if (this.vignette.parent) {
-        this.vignette.parent.removeChild(this.vignette);
-      }
+      this.vignette.removeFromParent();
       this.vignette.destroy();
       this.vignette = null;
     }

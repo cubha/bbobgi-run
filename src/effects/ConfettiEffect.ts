@@ -45,7 +45,7 @@ export class ConfettiEffect {
         delay: 0.6 + Math.random() * 0.9,
         ease: 'none',
         onComplete: () => {
-          if (particle.parent) particle.parent.removeChild(particle);
+          particle.removeFromParent();
           particle.destroy();
         },
       });

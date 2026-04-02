@@ -280,15 +280,21 @@ export class MainMenuScene extends BaseScene {
     });
   }
 
-  // ─── Lap Count Section (Horse Racing) ─────────
+  // ─── Dropdown Helper ──────────────────────────
 
-  private buildLapCountSection(): void {
+  private createDropdown(opts: {
+    label: string;
+    max: number;
+    unit: string;
+    initial: number;
+    visibleMode: GameMode;
+    onChange: (n: number) => void;
+  }): { container: Container; select: HTMLSelectElement } {
     const ctr = new Container();
-    ctr.visible = this.selectedGameMode === 'horse';
+    ctr.visible = this.selectedGameMode === opts.visibleMode;
     this.container.addChild(ctr);
-    this.lapCountContainer = ctr;
 
-    ctr.addChild(new SectionLabel({ text: '바퀴 수', y: 584 }).container);
+    ctr.addChild(new SectionLabel({ text: opts.label, y: 584 }).container);
 
     const { scale, offsetX, offsetY } = this.app.scaleInfo;
     const designX = 16;
@@ -317,79 +323,54 @@ export class MainMenuScene extends BaseScene {
       `z-index: 10`,
     ].join(';');
 
-    for (let n = 1; n <= 10; n++) {
+    for (let n = 1; n <= opts.max; n++) {
       const opt = document.createElement('option');
       opt.value = `${n}`;
-      opt.text = `${n}바퀴`;
-      if (n === this.selectedLapCount) opt.selected = true;
+      opt.text = `${n}${opts.unit}`;
+      if (n === opts.initial) opt.selected = true;
       select.appendChild(opt);
     }
 
     select.addEventListener('change', () => {
-      this.selectedLapCount = parseInt(select.value, 10);
+      opts.onChange(parseInt(select.value, 10));
     });
 
     const gameContainer = document.getElementById('game-container');
     (gameContainer ?? document.body).appendChild(select);
-    this.lapDropdown = select;
 
-    if (this.selectedGameMode !== 'horse') select.style.display = 'none';
+    if (this.selectedGameMode !== opts.visibleMode) select.style.display = 'none';
+
+    return { container: ctr, select };
+  }
+
+  // ─── Lap Count Section (Horse Racing) ─────────
+
+  private buildLapCountSection(): void {
+    const { container, select } = this.createDropdown({
+      label: '바퀴 수',
+      max: 10,
+      unit: '바퀴',
+      initial: this.selectedLapCount,
+      visibleMode: 'horse',
+      onChange: (n) => { this.selectedLapCount = n; },
+    });
+    this.lapCountContainer = container;
+    this.lapDropdown = select;
   }
 
   // ─── Marble Count Section ─────────────────────
 
   private buildMarbleCountSection(): void {
-    const ctr = new Container();
-    ctr.visible = this.selectedGameMode === 'marble';
-    this.container.addChild(ctr);
-    this.marbleCountContainer = ctr;
-
-    ctr.addChild(new SectionLabel({ text: '구슬 수', y: 584 }).container);
-
-    const { scale, offsetX, offsetY } = this.app.scaleInfo;
-    const designX = 16;
-    const designY = 604;
-    const designW = 358;
-    const designH = 38;
-
-    const select = document.createElement('select');
-    select.style.cssText = [
-      `position: fixed`,
-      `left: ${Math.round(designX * scale + offsetX)}px`,
-      `top: ${Math.round(designY * scale + offsetY)}px`,
-      `width: ${Math.round(designW * scale)}px`,
-      `height: ${Math.round(designH * scale)}px`,
-      `font-size: ${Math.round(16 * scale)}px`,
-      `font-family: monospace`,
-      `background: #1a1a2e`,
-      `color: #ffffff`,
-      `border: 2px solid #ff2d78`,
-      `border-radius: ${Math.round(6 * scale)}px`,
-      `padding: 0 ${Math.round(8 * scale)}px`,
-      `cursor: pointer`,
-      `outline: none`,
-      `appearance: none`,
-      `-webkit-appearance: none`,
-      `z-index: 10`,
-    ].join(';');
-
-    for (let n = 1; n <= 5; n++) {
-      const opt = document.createElement('option');
-      opt.value = `${n}`;
-      opt.text = `${n}개`;
-      if (n === this.selectedMarbleCount) opt.selected = true;
-      select.appendChild(opt);
-    }
-
-    select.addEventListener('change', () => {
-      this.selectedMarbleCount = parseInt(select.value, 10);
+    const { container, select } = this.createDropdown({
+      label: '구슬 수',
+      max: 5,
+      unit: '개',
+      initial: this.selectedMarbleCount,
+      visibleMode: 'marble',
+      onChange: (n) => { this.selectedMarbleCount = n; },
     });
-
-    const gameContainer = document.getElementById('game-container');
-    (gameContainer ?? document.body).appendChild(select);
+    this.marbleCountContainer = container;
     this.marbleCountDropdown = select;
-
-    if (this.selectedGameMode !== 'marble') select.style.display = 'none';
   }
 
   // ─── Name Input Section ───────────────────────
