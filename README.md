@@ -176,6 +176,8 @@ src/
 - [x] 구슬 레이스 V5 좌표 기반 트랙 빌더 (V5TrackBuilder) — 8구간 어드벤처, 분기 2회, 카오스존
 - [x] `createPipe` 통합 API — `direction: 'angled' | 'vertical' | 'curve'` + `color` prop
 - [x] SEC1 깔때기+핀존 구현 (깔때기 수렴 → 12핀 격자 → 수직 통로)
+- [x] SEC2 S-채널 3단 구현 (S자 방향 전환 채널, 9구슬 동시 수용, SEC3 입구 정합)
+- [x] SEC3 플링코 보드 구현 (5행×5/4핀 배열, 중앙 50px 구멍 → SEC4 낙하)
 - [ ] 사다리타기: 복잡한 구조 + 카오스 이벤트 시스템
 - [ ] 파친코: 함정/변수 추가 + 단일 골 구조 + 공 개수 설정
 - [ ] NetworkManager — Supabase Realtime 호스트-게스트 실시간 통신
