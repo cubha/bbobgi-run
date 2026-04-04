@@ -537,40 +537,82 @@ export class V5TrackBuilder {
   // SEC 4: 첫 번째 분기 FAST/SAFE (Y: 1160 → 1700)
   // ════════════════════════════════════════════════════════════════
   private buildSEC4(): void {
-    // ── 진입 깔때기 — SEC3 구멍(x=1885~1935, y=1290) 정확 수용 ─────
-    // 좌측: SEC3 좌벽(x=1760) → 분기 핀 직상부(1870, 1440)  [x1=1760 ≤ 1885 ✅]
-    this.createPipe(1760, 1290, 1870, 1440, { gap: 80, color: 0x996600 });
-    this.createWall(1755, 1285, 1330);  // 좌측 깔때기 입구 캐치 벽
-    // 우측: SEC3 우벽(x=2060) → 분기 핀 직상부(1950, 1440)  [x1=2060 ≥ 1935 ✅]
-    this.createPipe(2060, 1290, 1950, 1440, { gap: 80, color: 0x996600 });
-    this.createWall(2065, 1285, 1330);  // 우측 깔때기 입구 캐치 벽
+    const GAP  = 50;
+    const R    = 80;
+    const HALF = GAP / 2;  // 25
 
-    // ── 분기 핀 (구멍 중심 x=1910 직하방) ──────────────────────────
-    this.createPin(1910, 1450, 8, 0xffff00);
+    // ── 1단계: 수직 파이프 — SEC3 구멍(x=1885~1935, y=1290) ─────────
+    // gap=50px (SEC3 구멍 50px와 동일 → 마블 누출 차단)
+    this.createPipe(1910, 1290, 1910, 1360, {
+      direction: 'vertical',
+      gap: GAP,
+      color: 0x996600,
+    });
+
+    // ── 커브A: 수직→대각 전환 (SEC2 buildSEC2 패턴 동일) ─────────────
+    // 좌회전 → 커브 중심 = 파이프 centerX - R
+    // arcStart=0: (cAcx+R, cAcy) = (1910, 1360) = 수직 파이프 하단 ✓
+    // 내벽(R-HALF=55) at arcStart: (1830+55, 1360)=(1885,1360) ← 수직 파이프 좌벽 ✓
+    // 외벽(R+HALF=105) at arcStart: (1830+105,1360)=(1935,1360) ← 수직 파이프 우벽 ✓
+    const cAcx = 1910 - R;   // = 1830
+    const cAcy = 1360;
+    this.createPipe(cAcx, cAcy, 0, 0, {
+      direction: 'curve',
+      arcRadius: R,
+      arcStart: 0,
+      arcEnd: Math.PI / 3,   // 60°: 출구 탄젠트 ≈ 150°(좌하향) — CH_conn 방향 156°와 6° 오차
+      gap: GAP,
+      color: 0x996600,
+    });
+
+    // ── 2단계: 대각 연결 파이프 (CH_conn) — 커브 출구 → 분기점 ────────
+    // 커브 출구 = (cAcx + R*cos(arcEnd), cAcy + R*sin(arcEnd)) (SEC2 ch1X1/ch1Y1 동일)
+    const connX1 = cAcx + R * Math.cos(Math.PI / 3);  // 1830 + 40 = 1870
+    const connY1 = cAcy + R * Math.sin(Math.PI / 3);  // 1360 + 69.3 ≈ 1429
+    const splitX = 1480;
+    const splitY = 1600;
+    this.createPipe(connX1, connY1, splitX, splitY, {
+      gap: GAP,
+      color: 0x996600,
+    });
+
+    // ── 3단계: 분기 핀 ───────────────────────────────────────────────
+    this.createPin(splitX, splitY + 10, 8, 0xffff00);
+
+    // ── FAST/SLOW 시작점 — CH_conn 벽 끝점에서 수학적으로 유도 ────────
+    // 수직 방향(파이프 좌/우) 오프셋으로 틈 제거 (SEC2 ch1X1/Y1 유도와 동일 원리)
+    const cdx = splitX - connX1;
+    const cdy = splitY - connY1;
+    const clen = Math.sqrt(cdx * cdx + cdy * cdy);
+    const ux = cdx / clen;
+    const uy = cdy / clen;
+    const px = -uy;
+    const py = ux;
+
+    const fastStartX = splitX + px * HALF;
+    const fastStartY = splitY + py * HALF;
+    const slowStartX = splitX - px * HALF;
+    const slowStartY = splitY - py * HALF;
 
     // ── FAST 경로 (좌측 급경사, 붉은색) ────────────────────────────
-    // (1870, 1450) → (900, 1720) : 경사각 ≈ 0.27 rad ✅
-    this.createPipe(1870, 1450, 900, 1720, { gap: 40, color: 0xff4444 });
-    this.createWall(1875, 1440, 1465);   // 분기 핀 우캐치 (FAST 입구)
-    this.createWall(895,  1715, 1730);   // FAST 출구 캐치
-    this.createPin(1500, 1568, 5);       // 중간 핀1
-    this.createPin(1200, 1635, 5);       // 중간 핀2  (x간격 300px ✅)
+    this.createPipe(fastStartX, fastStartY, 900, 1780, { gap: 60, color: 0xff4444 });
+    this.createWall(895, 1775, 1790);    // FAST 출구 캐치
+    this.createPin(1190, 1688, 5);       // 중간 핀1
+    this.createPin(1040, 1735, 5);       // 중간 핀2
 
-    // ── SAFE 경로 (우측 완만경사, 녹색) ────────────────────────────
-    // (1950, 1450) → (2100, 1660) : 경사각 ≈ 0.95 rad ✅
-    this.createPipe(1950, 1450, 2100, 1660, { gap: 40, color: 0x44aa44 });
-    this.createWall(1945, 1440, 1465);   // 분기 핀 좌캐치 (SAFE 입구)
-    this.createWall(2105, 1655, 1670);   // SAFE 출구 캐치
-    this.createSeesaw(2025, 1555, 80);
+    // ── SLOW 경로 (우측 완만경사, 녹색) ────────────────────────────
+    this.createPipe(slowStartX, slowStartY, 2100, 1720, { gap: 60, color: 0x44aa44 });
+    this.createWall(2105, 1715, 1730);   // SLOW 출구 캐치
+    this.createSeesaw(1800, 1675, 80);
 
     // ── 컨테이너 벽 (y=1835까지 — 하단 개방 → SEC5/SEC6 낙하) ─────
-    this.createWall(880,  1720, 1835);   // 좌측 컨테이너 벽 (FAST 출구)
-    this.createWall(2110, 1660, 1835);   // 우측 컨테이너 벽 (SAFE 출구)
+    this.createWall(880,  1780, 1835);   // 좌측 컨테이너 벽 (FAST 출구)
+    this.createWall(2110, 1720, 1835);   // 우측 컨테이너 벽 (SLOW 출구)
 
     // ── 섹션 센서 ───────────────────────────────────────────────────
-    this.createSectionSensor(1910, 1470, 200, 30, 'sec4');
-    this.createSectionSensor(1385, 1590, 200, 30, 'sec4-fast');
-    this.createSectionSensor(2025, 1555, 200, 30, 'sec4-safe');
+    this.createSectionSensor(1675, 1515, 80, 30, 'sec4');    // CH_conn 중간
+    this.createSectionSensor(1190, 1690, 200, 30, 'sec4-fast');
+    this.createSectionSensor(1800, 1675, 200, 30, 'sec4-safe');
   }
 
   // ════════════════════════════════════════════════════════════════
