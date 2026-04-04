@@ -498,61 +498,79 @@ export class V5TrackBuilder {
   // SEC 3: 플링코 보드 (Y: 760 → 1310)
   // ════════════════════════════════════════════════════════════════
   private buildSEC3(): void {
-    // 넓은 플링코 (x=800~1950, 1150px — 9마블 동시 수용)
-    // 진입 가이드
-    this.createFloor(680, 720, 800, 840, 0x663366);    // 좌측 진입 가이드
-    this.createFloor(2080, 720, 1950, 840, 0x663366);  // 우측 진입 가이드
+    const color = 0x663366;
 
-    // 좌우 경계벽 (y=840→1310, 펀치 없이 SEC4 합류점까지 연장)
-    this.createWall(800, 840, 1310);
-    this.createWall(1950, 840, 1310);
+    // ── 외벽 ────────────────────────────────────────────────────────
+    // 상단 캡 (수평, 완전 밀폐)
+    this.createFloor(1760, 900, 2060, 900, color);
 
-    // 핀 배열: 5줄, 1150px 폭에 넓은 간격 (T-07 셔플용 랜덤성 유지)
+    // 좌벽 상단: y=900→977 (CH3 입구 위)
+    this.createWall(1760, 900, 977, color);
+    // 좌벽 하단: y=1097→1290 (CH3 입구 아래)
+    this.createWall(1760, 1097, 1290, color);
+
+    // 우벽 전체: y=900→1290 (CH3 마블 우향 이탈 포착)
+    this.createWall(2060, 900, 1290, color);
+
+    // 하단: 중앙 50px 구멍(x=1885~1935) 개방 → SEC4 낙하
+    this.createFloor(1760, 1290, 1885, 1290, color);  // 하단 좌측
+    this.createFloor(1935, 1290, 2060, 1290, color);  // 하단 우측
+
+    // ── 핀 배열 (SEC1과 동일 규격: r=8, x간격=52px, y간격=27px) ────
+    // 핀 유효 구역: x=1790~2030 (좌우 벽에서 30px 이격), y=1110~1218
+    // 짝수행(5핀): x=1790, 1842, 1894, 1946, 1998
+    // 홀수행(4핀): x=1816, 1868, 1920, 1972 (오프셋 +26)
+    const EVEN_COLS = [1790, 1842, 1894, 1946, 1998];
+    const ODD_COLS  = [1816, 1868, 1920, 1972];
+
     for (let row = 0; row < 5; row++) {
-      const cols = row % 2 === 0 ? 8 : 7;
-      const startX = row % 2 === 0 ? 870 : 940;
-      const y = 880 + row * 50;
-      for (let col = 0; col < cols; col++) {
-        this.createPin(startX + col * 145, y, 5);
-      }
+      const y = 1110 + row * 27;
+      const cols = row % 2 === 0 ? EVEN_COLS : ODD_COLS;
+      cols.forEach(x => this.createPin(x, y, 8));
     }
 
-    // 하단: 직접 SEC4 합류 깔때기로 수렴 (별도 슬로프 없음 — buildSEC4에 통합)
-
-    // Section 3 sensor (플링코 전폭 — x=800~1950 커버)
-    this.createSectionSensor(1375, 1000, 1100, 80, 'sec3');
+    // ── 섹션 센서 ──────────────────────────────────────────────────
+    this.createSectionSensor(1910, 1190, 260, 40, 'sec3');
   }
 
   // ════════════════════════════════════════════════════════════════
   // SEC 4: 첫 번째 분기 FAST/SAFE (Y: 1160 → 1700)
   // ════════════════════════════════════════════════════════════════
   private buildSEC4(): void {
-    // 진입 깔때기 (플링코 벽 하단 y=1160에서 직접 시작)
-    this.createFloor(800, 1160, 1060, 1310, 0x996600);
-    this.createFloor(1950, 1160, 1140, 1310, 0x996600);
+    // ── 진입 깔때기 — SEC3 구멍(x=1885~1935, y=1290) 정확 수용 ─────
+    // 좌측: SEC3 좌벽(x=1760) → 분기 핀 직상부(1870, 1440)  [x1=1760 ≤ 1885 ✅]
+    this.createPipe(1760, 1290, 1870, 1440, { gap: 80, color: 0x996600 });
+    this.createWall(1755, 1285, 1330);  // 좌측 깔때기 입구 캐치 벽
+    // 우측: SEC3 우벽(x=2060) → 분기 핀 직상부(1950, 1440)  [x1=2060 ≥ 1935 ✅]
+    this.createPipe(2060, 1290, 1950, 1440, { gap: 80, color: 0x996600 });
+    this.createWall(2065, 1285, 1330);  // 우측 깔때기 입구 캐치 벽
 
-    // 분기 핀
-    this.createPin(1100, 1320, 8, 0xffff00);
+    // ── 분기 핀 (구멍 중심 x=1910 직하방) ──────────────────────────
+    this.createPin(1910, 1450, 8, 0xffff00);
 
-    // FAST 경로 (좌측 경사) — 슈트 없음, 넓은 개방 출구
-    this.createFloor(1060, 1325, 620, 1540, 0xff4444);
-    this.createWall(1065, 1310, 1340);
-    this.createPin(880, 1400, 5);
-    this.createPin(770, 1450, 5);
+    // ── FAST 경로 (좌측 급경사, 붉은색) ────────────────────────────
+    // (1870, 1450) → (900, 1720) : 경사각 ≈ 0.27 rad ✅
+    this.createPipe(1870, 1450, 900, 1720, { gap: 40, color: 0xff4444 });
+    this.createWall(1875, 1440, 1465);   // 분기 핀 우캐치 (FAST 입구)
+    this.createWall(895,  1715, 1730);   // FAST 출구 캐치
+    this.createPin(1500, 1568, 5);       // 중간 핀1
+    this.createPin(1200, 1635, 5);       // 중간 핀2  (x간격 300px ✅)
 
-    // SAFE 경로 (우측 경사) — 슈트 없음, x=1540에서 종료 (컨테이너 우벽 내부)
-    this.createFloor(1140, 1325, 1540, 1530, 0x44aa44);
-    this.createWall(1135, 1310, 1340);
-    this.createSeesaw(1350, 1430, 80);
+    // ── SAFE 경로 (우측 완만경사, 녹색) ────────────────────────────
+    // (1950, 1450) → (2100, 1660) : 경사각 ≈ 0.95 rad ✅
+    this.createPipe(1950, 1450, 2100, 1660, { gap: 40, color: 0x44aa44 });
+    this.createWall(1945, 1440, 1465);   // 분기 핀 좌캐치 (SAFE 입구)
+    this.createWall(2105, 1655, 1670);   // SAFE 출구 캐치
+    this.createSeesaw(2025, 1555, 80);
 
-    // 컨테이너 벽: 우벽=x=1555 (SEC5 바닥 우끝과 일치 → 갭 없음)
-    this.createWall(610, 1525, 1705);   // 좌측 컨테이너 벽
-    this.createWall(1555, 1525, 1705);  // 우측 컨테이너 벽 (SEC5 바닥 우끝 x=1555 정렬)
+    // ── 컨테이너 벽 (y=1835까지 — 하단 개방 → SEC5/SEC6 낙하) ─────
+    this.createWall(880,  1720, 1835);   // 좌측 컨테이너 벽 (FAST 출구)
+    this.createWall(2110, 1660, 1835);   // 우측 컨테이너 벽 (SAFE 출구)
 
-    // Section 4 sensors
-    this.createSectionSensor(1100, 1350, 200, 30, 'sec4');
-    this.createSectionSensor(830, 1450, 200, 30, 'sec4-fast');
-    this.createSectionSensor(1380, 1450, 200, 30, 'sec4-safe');
+    // ── 섹션 센서 ───────────────────────────────────────────────────
+    this.createSectionSensor(1910, 1470, 200, 30, 'sec4');
+    this.createSectionSensor(1385, 1590, 200, 30, 'sec4-fast');
+    this.createSectionSensor(2025, 1555, 200, 30, 'sec4-safe');
   }
 
   // ════════════════════════════════════════════════════════════════
