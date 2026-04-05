@@ -27,7 +27,7 @@ export class MainMenuScene extends BaseScene {
   private pickCards: PickModeCard[] = [];
   private modeCards: ModeCard[] = [];
   private ballCountContainer: Container | null = null;
-  private ballCountBtns: Graphics[] = [];
+  private ballCountDropdown: HTMLSelectElement | null = null;
   private lapCountContainer: Container | null = null;
   private lapDropdown: HTMLSelectElement | null = null;
   private selectedMarbleCount: number = 1;
@@ -84,6 +84,8 @@ export class MainMenuScene extends BaseScene {
     gsap.killTweensOf(this.container);
     this.nameInput?.destroy();
     this.nameInput = null;
+    this.ballCountDropdown?.remove();
+    this.ballCountDropdown = null;
     this.lapDropdown?.remove();
     this.lapDropdown = null;
     this.marbleCountDropdown?.remove();
@@ -215,6 +217,9 @@ export class MainMenuScene extends BaseScene {
     if (this.ballCountContainer) {
       this.ballCountContainer.visible = mode === 'pachinko';
     }
+    if (this.ballCountDropdown) {
+      this.ballCountDropdown.style.display = mode === 'pachinko' ? '' : 'none';
+    }
     if (this.lapCountContainer) {
       this.lapCountContainer.visible = mode === 'horse';
     }
@@ -229,55 +234,19 @@ export class MainMenuScene extends BaseScene {
     }
   }
 
-  // ─── Ball Count Section ───────────────────────
+  // ─── Ball Count Section (Pachinko) ───────────
 
   private buildBallCountSection(): void {
-    const ctr = new Container();
-    ctr.visible = this.selectedGameMode === 'pachinko';
-    this.container.addChild(ctr);
-    this.ballCountContainer = ctr;
-
-    ctr.addChild(new SectionLabel({ text: '공 개수', y: 584 }).container);
-
-    const counts = [1, 2, 3];
-    counts.forEach((n, i) => {
-      const bg = new Graphics();
-      bg.x = 16 + i * 110;
-      bg.y = 604;
-      bg.eventMode = 'static';
-      bg.cursor = 'pointer';
-      bg.on('pointertap', () => this.selectBallCount(n));
-      ctr.addChild(bg);
-      this.ballCountBtns.push(bg);
-
-      this.drawBallCountBtn(bg, n, n === this.selectedBallCount);
+    const { container, select } = this.createDropdown({
+      label: '공 개수',
+      max: 3,
+      unit: '개',
+      initial: this.selectedBallCount,
+      visibleMode: 'pachinko',
+      onChange: (n) => { this.selectedBallCount = n; },
     });
-  }
-
-  private drawBallCountBtn(bg: Graphics, n: number, selected: boolean): void {
-    bg.clear();
-    bg.rect(0, 0, 100, 36);
-    bg.fill({ color: selected ? COLORS.primary : COLORS.secondary, alpha: selected ? 1 : 0.7 });
-    bg.rect(0, 0, 100, 36);
-    bg.stroke({ color: selected ? COLORS.pink : COLORS.darkGray, width: 2, alpha: 0.8 });
-
-    const label = new Text({
-      text: `${n}개`,
-      style: { fontFamily: FONT_DISPLAY, fontSize: 16, fill: COLORS.text, fontWeight: 'bold' },
-    });
-    label.anchor.set(0.5);
-    label.x = 50;
-    label.y = 18;
-    bg.addChild(label);
-  }
-
-  private selectBallCount(n: number): void {
-    this.selectedBallCount = n;
-    this.ballCountBtns.forEach((bg, i) => {
-      // Remove old label children before redraw
-      while (bg.children.length > 0) bg.removeChildAt(0);
-      this.drawBallCountBtn(bg, i + 1, i + 1 === n);
-    });
+    this.ballCountContainer = container;
+    this.ballCountDropdown = select;
   }
 
   // ─── Dropdown Helper ──────────────────────────
