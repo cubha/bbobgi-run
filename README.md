@@ -179,6 +179,7 @@ src/
 - [x] SEC2 S-채널 3단 구현 (S자 방향 전환 채널, 9구슬 동시 수용, SEC3 입구 정합)
 - [x] SEC3 플링코 보드 구현 (5행×5/4핀 배열, 중앙 50px 구멍 → SEC4 낙하)
 - [x] SEC4 분기 FAST/SLOW 좌표 정합 — 수직 파이프→커브→대각 CH_conn 패턴으로 SEC3→SEC4 연결 재설계 (gap=50 통일, splitX/Y 기반 분기핀, 수직 오프셋으로 FAST/SLOW 시작점 유도)
+- [x] SEC4 챔버-파이프 연결부 갭 제거 — 유도경사 `createFloor` → `createPipe(gap=60)` 교체로 코너커브 외벽(y≈1960)과 seamless 연결, 챔버 좌/우벽 하한을 `CHAMBER_BOT+30` → `CHAMBER_BOT`으로 축소
 - [ ] 사다리타기: 복잡한 구조 + 카오스 이벤트 시스템
 - [ ] 파친코: 함정/변수 추가 + 단일 골 구조 + 공 개수 설정
 - [ ] NetworkManager — Supabase Realtime 호스트-게스트 실시간 통신
@@ -238,6 +239,7 @@ bash verify.sh
 
 | 날짜 | 분류 | 증상 | 원인 | 해결 |
 |---|---|---|---|---|
+| 2026-04-05 | 버그 수정 | SEC4 챔버 하단~코너커브 외벽 사이 30px 갭 — 구슬 FAST/SLOW 경로 이탈 | 유도경사(`createFloor`) gap 없는 단일 선분으로 코너커브 외벽(y≈1960)까지 연결이 안 됨; 챔버벽 하한(y=1930)보다 커브 외벽이 30px 아래에서 시작 | 유도경사를 `createPipe(gap=60)`으로 교체(파이프 외벽이 코너커브 외벽과 수학적으로 일치), 챔버 좌/우벽 하한을 `CHAMBER_BOT`으로 축소 |
 | 2026-03-28 | 버그 수정 | V3 트랙 전 구간에서 구슬 끼임 (완주 불가) | ChannelRampSegment `signedAngle = -angle * direction` 부호 반전으로 경사 방향이 설계와 반대 | `signedAngle = angle * direction`으로 수정 + noCeiling 옵션 + CurvedChannel 가이드벽 제거 + SEC4 출구 재정렬. 10명×10회 반복 100% 완주 달성 |
 | 2026-03-24 | 버그 수정 | 구슬 레이스 첫 경로에서 구슬 전체 막힘 | 경사로 각도 부호 오류 — `angle = TRACK.rampAngle * direction`으로 구슬이 벽과 경사로 사이 10px 틈으로 몰림 (구슬 지름 16px) | `angle = -TRACK.rampAngle * direction`으로 수정, 40px 출구 방향으로 흘러내리도록 변경 |
 | 2026-03-22 | 제거 | 베팅 시스템 오버엔지니어링 | 게임 목적(관람형 뽑기)과 불일치, 코드 복잡도 증가 | BettingManager / BettingPanel / BettingResultPanel 전체 삭제 |
