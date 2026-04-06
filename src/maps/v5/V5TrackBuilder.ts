@@ -84,7 +84,6 @@ export class V5TrackBuilder {
   build(): void {
     this.buildBackground();
     this.buildWorldBounds();
-    this.buildTestPipe();
     this.buildSEC1();
     this.buildSEC2();
     this.buildSEC3();
@@ -294,6 +293,7 @@ export class V5TrackBuilder {
   }
 
   /** Create a windmill (kinematic rotating blades) */
+  // @ts-expect-error — 향후 SEC7 파이프 기반 재구현에서 사용 예정
   private createWindmill(x: number, y: number, r: number, blades = 4, speed = 2.0): void {
     const bladeThick = 10;
     const body = this.physics.createKinematicBody(x, y);
@@ -520,16 +520,16 @@ export class V5TrackBuilder {
 
     // 좌벽 상단: y=TOP → 개구부 위 (CH3 중심선 - halfGap)
     this.createWall(wallX, TOP, openMidY - halfGap, color);
-    // 좌벽 하단: 개구부 아래 (CH3 중심선 + halfGap) → BOT
-    this.createWall(wallX, openMidY + halfGap, BOT, color);
+    // 좌벽 하단: 개구부 아래 (CH3 중심선 + halfGap) → BOT - 20 (경사 끝점과 정합)
+    this.createWall(wallX, openMidY + halfGap, BOT - 20, color);
 
-    // 우벽 전체: TOP→BOT
-    this.createWall(RIGHT, TOP, BOT, color);
+    // 우벽 전체: TOP → BOT - 20 (경사 끝점과 정합)
+    this.createWall(RIGHT, TOP, BOT - 20, color);
 
     // 하단: 중앙 50px 구멍(x=1885~1935) 개방 → SEC4 낙하
-    // 좌우 끝을 20px 높여 구슬이 자연스럽게 중앙 구멍으로 굴러내림 (경사 강화)
-    this.createFloor(wallX, BOT - 20, 1885, BOT, color);  // 하단 좌측 (경사 강화)
-    this.createFloor(1935, BOT, RIGHT, BOT - 20, color);  // 하단 우측 (경사 강화)
+    // 경사 바닥 — 좌우 끝점 y=BOT-20, 벽 꼭지점과 정합하여 라인 삐져나옴 방지
+    this.createFloor(wallX, BOT - 20, 1885, BOT, color);  // 하단 좌측 — 경사 강화
+    this.createFloor(1935, BOT, RIGHT, BOT - 20, color);  // 하단 우측 — 경사 강화
 
     // ── 핀 배열 (SEC1과 동일 규격: r=8, x간격=52px, y간격=27px) ────
     // 핀 유효 구역: wallX~RIGHT 내 30px 이격, y=1110~1218
@@ -556,8 +556,8 @@ export class V5TrackBuilder {
     const R    = 80;
     const HALF = GAP / 2; // 25
 
-    // ── 1단계: 수직 파이프 — SEC3 하단 floor 두께(6px/2=3) 하단부터 시작
-    this.createPipe(1910, 1293, 1910, 1363, {
+    // ── 1단계: 수직 파이프 — SEC3 하단 floor 바닥~커브A 오버랩 포함
+    this.createPipe(1910, 1293, 1910, 1370, {
       direction: 'vertical',
       gap: GAP,
       color: 0x996600,
@@ -576,8 +576,8 @@ export class V5TrackBuilder {
     });
 
     // ── 2단계: CH_conn 사선 파이프 + 챔버 입구 전환 커브 ────────────
-    const connX1 = cAcx + R * Math.cos(Math.PI / 3); // ≈ 1870
-    const connY1 = cAcy + R * Math.sin(Math.PI / 3); // ≈ 1429
+    const connX1 = cAcx + R * Math.cos(Math.PI / 3);           // = 1870
+    const connY1 = Math.round(cAcy + R * Math.sin(Math.PI / 3)); // = 1432
     const splitX = 1400;
     const splitY = 1750;
 
@@ -590,15 +590,17 @@ export class V5TrackBuilder {
     const transCx = splitX + R_conn;               // = 1460
     const transCy = splitY;                         // = 1750
 
-    // 커브 시작점 (CH_conn의 새 끝점)
-    const curveStartX = transCx + R_conn * Math.cos(transArcStart);
-    const curveStartY = transCy + R_conn * Math.sin(transArcStart);
+    // 커브 시작점 (CH_conn의 끝점) — 소수점 반올림으로 정합
+    const curveStartX = Math.round(transCx + R_conn * Math.cos(transArcStart));
+    const curveStartY = Math.round(transCy + R_conn * Math.sin(transArcStart));
 
-    // CH_conn: 커브 시작점까지만 연장
-    this.createPipe(connX1, connY1, curveStartX, curveStartY, {
-      gap: GAP,
-      color: 0x996600,
-    });
+    // CH_conn: 커브 시작점 + OVERLAP(8px) 연장 → 전환커브와 연결부 갭 방지
+    const CONN_OVERLAP = 8;
+    this.createPipe(connX1, connY1,
+      Math.round(curveStartX + CONN_OVERLAP * Math.cos(connAngle)),
+      Math.round(curveStartY + CONN_OVERLAP * Math.sin(connAngle)),
+      { gap: GAP, color: 0x996600 },
+    );
 
     // 전환 커브 (CW: arcStart → arcEnd 감소)
     this.createPipe(transCx, transCy, 0, 0, {
@@ -617,54 +619,56 @@ export class V5TrackBuilder {
     const CHAMBER_TOP = splitY;       // 1750
     const CHAMBER_BOT = splitY + 150; // 1900
 
-    const inletL = splitX - HALF; // 1375 — CH_conn 입구 좌측
-    const inletR = splitX + HALF; // 1425 — CH_conn 입구 우측
+    const inletL = splitX - HALF; // 1375 — 전환커브 입구 좌측
+    const inletR = splitX + HALF; // 1425 — 전환커브 입구 우측
 
     // 상단: 입구(50px) 열고 좌/우 수평벽 (미세경사 +4px — 영구정지 방지)
     this.createFloor(CHAMBER_L, CHAMBER_TOP, inletL, CHAMBER_TOP + 4, 0x996600);
     this.createFloor(inletR, CHAMBER_TOP, CHAMBER_R, CHAMBER_TOP + 4, 0x996600);
 
-    // 좌/우 수직벽 (CHAMBER_BOT=1900까지 — 유도경사 파이프가 이하 구간 커버)
+    // 좌/우 수직벽 (CHAMBER_BOT=1900까지 — V자 바닥 영역에 출구 개방)
     this.createWall(CHAMBER_L, CHAMBER_TOP, CHAMBER_BOT, 0x996600);
     this.createWall(CHAMBER_R, CHAMBER_TOP, CHAMBER_BOT, 0x996600);
 
-    // ── 4단계: 챔버 하단 분기 핀 + 유도 경사 ────────────────────────
-    const CHAMBER_MID_X = Math.round((CHAMBER_L + CHAMBER_R) / 2); // 1450
-    this.createPin(CHAMBER_MID_X, CHAMBER_BOT + 10, 10, 0xffff00);
+    // ── 4단계: 챔버 하단 역V자 경사 floor + 양쪽 출구 개구부 ────────────
+    const BRANCH_GAP  = 60;
+    const BRANCH_R    = 80;
+    const FAST_GAP    = BRANCH_GAP;
+    const SLOW_GAP    = BRANCH_GAP;
+    const FAST_R      = 80;
+    const SLOW_R      = 80;
+    const OVERLAP     = 8;
 
-    const FAST_GAP = 60;
-    const SLOW_GAP = 60;
+    // LEFT 출구 중심: x=1100, RIGHT 출구 중심: x=1700
+    // 개구부 폭 = BRANCH_GAP = 60 → LEFT: x=1070~1130, RIGHT: x=1670~1730
+    const LEFT_OUT_X  = 1100;
+    const RIGHT_OUT_X = 1700;
+    const OUT_HALF    = BRANCH_GAP / 2; // 30
 
-    // 좌/우 유도 경사 파이프 (gap=60 채널 — 코너커브 외벽과 seamless 연결)
-    this.createPipe(CHAMBER_MID_X, CHAMBER_BOT, CHAMBER_L, CHAMBER_BOT + 30, { gap: FAST_GAP, color: 0x996600 });
-    this.createPipe(CHAMBER_MID_X, CHAMBER_BOT, CHAMBER_R, CHAMBER_BOT + 30, { gap: SLOW_GAP, color: 0x996600 });
+    // 역V 바닥 4개: 좌벽→LEFT개구부 / 경사좌 / 경사우 / RIGHT개구부→우벽
+    this.createFloor(CHAMBER_L, CHAMBER_BOT, LEFT_OUT_X - OUT_HALF, CHAMBER_BOT, 0x996600);
+    this.createFloor(LEFT_OUT_X + OUT_HALF, CHAMBER_BOT, 1412, CHAMBER_BOT - 40, 0x996600);
+    this.createFloor(1412, CHAMBER_BOT - 40, RIGHT_OUT_X - OUT_HALF, CHAMBER_BOT, 0x996600);
+    this.createFloor(RIGHT_OUT_X + OUT_HALF, CHAMBER_BOT, CHAMBER_R, CHAMBER_BOT, 0x996600);
 
-    // ── 5단계: FAST 경로 (좌하) — 코너커브 → 사선 → CW커브 → 수직 ───
-    // 코너커브: 유도경사 끝점(CHAMBER_L, CHAMBER_BOT+30)=(1000,1930)에서
-    //           사선 파이프 방향으로 수직→사선 전환 (SEC4 커브A 동일 패턴)
-    const FAST_R   = 80;
-    const FAST_CR  = 80;  // 코너 커브 반지름
-    const OVERLAP  = 8;
-    // 유도경사 방향각: (CHAMBER_MID_X, CHAMBER_BOT)→(CHAMBER_L, CHAMBER_BOT+30)
-    const fastSlopeAngle = Math.atan2(
-      (CHAMBER_BOT + 30) - CHAMBER_BOT,
-      CHAMBER_L - CHAMBER_MID_X,
-    ); // ≈ atan2(30, -450)
-    // FAST 사선 방향각 기준 (원래 시작점 기준, 방향 보존)
-    const fastRefAngle = Math.atan2(2050 - (CHAMBER_BOT + 30), 700 - (CHAMBER_L + 30)); // ≈ atan2(120,-330)
-    const fastCArcS = fastSlopeAngle - Math.PI / 2; // 유도경사 접선
-    const fastCArcE = fastRefAngle   - Math.PI / 2; // FAST 사선 접선
-    // 코너 커브 중심: arcStart 지점 = (CHAMBER_L, CHAMBER_BOT+30)
-    const fastCCx = CHAMBER_L - FAST_CR * Math.cos(fastCArcS);
-    const fastCCy = (CHAMBER_BOT + 30) - FAST_CR * Math.sin(fastCArcS);
-    this.createPipe(fastCCx, fastCCy, 0, 0, {
-      direction: 'curve', arcRadius: FAST_CR,
-      arcStart: fastCArcS, arcEnd: fastCArcE,
-      gap: FAST_GAP, color: 0xff4444,
+    // ── 5단계: FAST 경로 (좌하) — 90° 커브 → 사선 → CW커브 → 수직 ────
+    // LEFT 출구(1100, 1900)에서 수직하강 → 좌향 90° 전환
+    // 커브 중심: (LEFT_OUT_X - BRANCH_R, CHAMBER_BOT) = (1020, 1900)
+    // arcStart=0: (1020+80, 1900) = (1100, 1900) = 출구 중심 ✓
+    // arcEnd=π/2: (1020, 1900+80) = (1020, 1980) = FAST 사선 시작 ✓
+    const fastCurveCx = LEFT_OUT_X - BRANCH_R;  // 1020
+    const fastCurveCy = CHAMBER_BOT;              // 1900
+    this.createPipe(fastCurveCx, fastCurveCy, 0, 0, {
+      direction: 'curve',
+      arcRadius: BRANCH_R,
+      arcStart: 0,
+      arcEnd: Math.PI / 2,
+      gap: BRANCH_GAP,
+      color: 0xff4444,
     });
-    // 코너 커브 출구 = FAST 사선 파이프 시작점
-    const fastSX = fastCCx + FAST_CR * Math.cos(fastCArcE);
-    const fastSY = fastCCy + FAST_CR * Math.sin(fastCArcE);
+    // FAST 사선 시작점: 커브 arcEnd=π/2 출구
+    const fastSX = fastCurveCx;          // 1020
+    const fastSY = fastCurveCy + BRANCH_R; // 1980
     const fastEX = 700;
     const fastEY = 2050;
     const fastAlpha = Math.atan2(fastEY - fastSY, fastEX - fastSX);
@@ -689,30 +693,25 @@ export class V5TrackBuilder {
       direction: 'vertical', gap: FAST_GAP, color: 0xff4444,
     });
 
-    // ── 6단계: SLOW 경로 (우하) — 코너커브 → 사선 → CCW커브 → 수직 ──
-    // 코너커브: 유도경사 끝점(CHAMBER_R, CHAMBER_BOT+30)=(1800,1930)에서
-    //           사선 파이프 방향으로 전환
-    const SLOW_R   = 80;
-    const SLOW_CR  = 80;  // 코너 커브 반지름
-    const slowSlopeAngle = Math.atan2(
-      (CHAMBER_BOT + 30) - CHAMBER_BOT,
-      CHAMBER_R - CHAMBER_MID_X,
-    ); // ≈ atan2(30, +350)
-    const slowRefAngle = Math.atan2(2050 - (CHAMBER_BOT + 30), 1950 - (CHAMBER_R - 30)); // ≈ atan2(120,180)
-    const slowCArcS = slowSlopeAngle - Math.PI / 2; // 유도경사 접선
-    const slowCArcE = slowRefAngle   - Math.PI / 2; // SLOW 사선 접선
-    // 코너 커브 중심: arcStart 지점 = (CHAMBER_R, CHAMBER_BOT+30)
-    const slowCCx = CHAMBER_R - SLOW_CR * Math.cos(slowCArcS);
-    const slowCCy = (CHAMBER_BOT + 30) - SLOW_CR * Math.sin(slowCArcS);
-    this.createPipe(slowCCx, slowCCy, 0, 0, {
-      direction: 'curve', arcRadius: SLOW_CR,
-      arcStart: slowCArcS, arcEnd: slowCArcE,
-      gap: SLOW_GAP, color: 0x44aa44,
+    // ── 6단계: SLOW 경로 (우하) — 90° 커브 → 사선 → CCW커브 → 수직 ──
+    // RIGHT 출구(1700, 1900)에서 수직하강 → 우향 90° 전환
+    // 커브 중심: (RIGHT_OUT_X + BRANCH_R, CHAMBER_BOT) = (1780, 1900)
+    // arcStart=π: (1780-80, 1900) = (1700, 1900) = 출구 중심 ✓
+    // arcEnd=π/2: (1780, 1900+80) = (1780, 1980) = SLOW 사선 시작 ✓
+    const slowCurveCx = RIGHT_OUT_X + BRANCH_R;  // 1780
+    const slowCurveCy = CHAMBER_BOT;               // 1900
+    this.createPipe(slowCurveCx, slowCurveCy, 0, 0, {
+      direction: 'curve',
+      arcRadius: BRANCH_R,
+      arcStart: Math.PI,
+      arcEnd: Math.PI / 2,
+      gap: BRANCH_GAP,
+      color: 0x44aa44,
     });
-    // 코너 커브 출구 = SLOW 사선 파이프 시작점
-    const slowSX = slowCCx + SLOW_CR * Math.cos(slowCArcE);
-    const slowSY = slowCCy + SLOW_CR * Math.sin(slowCArcE);
-    const slowEX = 1950;
+    // SLOW 사선 시작점: 커브 arcEnd=π/2 출구
+    const slowSX = slowCurveCx;           // 1780
+    const slowSY = slowCurveCy + BRANCH_R;  // 1980
+    const slowEX = 2100;  // FAST 대칭: dx=+320 (FAST는 dx=-320)
     const slowEY = 2050;
     const slowAlpha = Math.atan2(slowEY - slowSY, slowEX - slowSX);
     const slowArcS  = slowAlpha - Math.PI / 2;
@@ -748,127 +747,34 @@ export class V5TrackBuilder {
   // SEC 5: 자유낙하 구간 (Y: 1700 → 1705, 컨테이너 출구 센서만)
   // ════════════════════════════════════════════════════════════════
   private buildSEC5(): void {
-    // 마블이 컨테이너(x=610-1555, y=1525-1700)에서 자유낙하
-    // 바닥/슬로프 없이 SEC6 통합 슬로프로 직결
-    // Section 5 sensor: 컨테이너 하단 출구 전체 커버 (모든 마블 통과)
-    this.createSectionSensor(1082, 1715, 945, 40, 'sec5');
+    // TODO: 파이프 기반 재구현 예정
   }
 
   // ════════════════════════════════════════════════════════════════
   // SEC 6: 카오스 존 (Y: 1705 → 2290) — 통합 좌향 슬로프
   // ════════════════════════════════════════════════════════════════
   private buildSEC6(): void {
-    // 통합 슬로프: 컨테이너 우측 출구(1555,1705) → 수직 낙하 입구(345,1970)
-    // 경사 12.4° 좌향 하강 — FAST(x≈700) / SAFE(x≈1540) 자연 스태거 발생
-    // 중력이 좌측 방향으로 작용 → 우측 캐치벽 없음, 파일업 불발생
-    this.createFloor(1555, 1705, 345, 1970, 0x662200);
-    // 좌측 경계벽 (y=1700 ~ 2120): 고속 마블이 슬로프 좌끝(345,1970) 뚫는 것 방지
-    this.createWall(345, 1700, 2120);
-    // 우측 경계벽 (x=1555, y=1705~2250): 슬로프 우끝 이탈 방지
-    this.createWall(1555, 1705, 2250);
-
-    // 수직 낙하 구간 (폭 200px — 9마블 충분 수용)
-    this.createWall(545, 1970, 2120);
-
-    // CH2: 좌→우 하강 → SEC7 (catch wall 없음 — 우끝에서 자연낙하로 SEC7 깔때기 진입)
-    this.createFloor(345, 2120, 1100, 2250, 0x662200);
-
-    // Section 6 sensor (통합 슬로프 좌측 하단 — 모든 마블 통과)
-    this.createSectionSensor(700, 1882, 300, 30, 'sec6');
+    // TODO: 파이프 기반 재구현 예정
   }
 
   // ════════════════════════════════════════════════════════════════
   // SEC 7: 두 번째 분기 VORTEX/SPRINT (Y: 2270 → 2640)
   // ════════════════════════════════════════════════════════════════
   private buildSEC7(): void {
-    // 광폭 진입 깔때기: CH2 출구(y=2250) 전체 폭 커버 → 마블 탈출 불가
-    // x=300~1020 (좌측), x=1600~1180 (우측) → y=2250에서 2340까지 수렴
-    this.createFloor(300, 2250, 1020, 2340, 0x333399);   // 좌측 광폭 깔때기
-    this.createFloor(1600, 2250, 1180, 2340, 0x333399);  // 우측 광폭 깔때기
-    // 외벽: 깔때기 하단~합류 구간 (VORTEX/SPRINT 경로 안전 경계)
-    this.createWall(300, 2340, 2640);    // 좌측 외벽
-    this.createWall(1600, 2340, 2640);   // 우측 외벽
-
-    // 분기점
-    this.createPin(1100, 2355, 8, 0xffff00);
-
-    // VORTEX 경로 (좌측, 지그재그 4단) — 밀폐 파이프
-    this.createPipe(1020, 2360, 700, 2410, { gap: 40, color: 0x6666ff });
-    this.createWall(1025, 2350, 2365);
-    this.createWall(695, 2405, 2430);
-    this.createPipe(700, 2420, 950, 2470, { gap: 40, color: 0x6666ff });
-    this.createWall(955, 2465, 2490);
-    this.createPipe(950, 2480, 700, 2530, { gap: 40, color: 0x6666ff });
-    this.createWall(695, 2525, 2555);
-    this.createPipe(700, 2545, 900, 2580, { gap: 40, color: 0x6666ff });
-
-    // SPRINT 경로 (우측, 직선 급경사)
-    this.createFloor(1180, 2360, 1500, 2500, 0xffaa00);
-    this.createWall(1175, 2350, 2365);
-    // SPRINT windmill: y=2388으로 올려서 블레이드 끝(y=2404) ↔ 대리석 상단(y≈2411) gap=7px
-    this.createWindmill(1350, 2388, 16, 3, 2.0);
-    this.createFloor(1500, 2500, 1300, 2580, 0xffaa00);
-    this.createWall(1505, 2495, 2510);
-
-    // 합류 깔때기
-    this.createFloor(900, 2585, 1020, 2620, 0x333399);
-    this.createFloor(1300, 2585, 1180, 2620, 0x333399);
-    this.createFloor(1020, 2625, 1180, 2625, 0x333399);
-    this.createWall(1020, 2615, 2630);
-    this.createWall(1180, 2615, 2630);
-
-    // Section 7 sensor
-    this.createSectionSensor(1100, 2385, 200, 30, 'sec7');
-    // Branch sensors
-    this.createSectionSensor(870, 2440, 200, 30, 'sec7-vortex');
-    this.createSectionSensor(1350, 2440, 200, 30, 'sec7-sprint');
+    // TODO: 파이프 기반 재구현 예정
   }
 
   // ════════════════════════════════════════════════════════════════
   // SEC 8: 파이널 스프린트 (Y: 2640 → 2900)
   // ════════════════════════════════════════════════════════════════
   private buildSEC8(): void {
-    // 가속 채널 (좌→우)
-    this.createFloor(1020, 2640, 1800, 2760, 0x990000);
-    this.createWall(1020, 2615, 2645);         // 높은쪽 벽
-
-    // 시소 게이트
-    this.createSeesaw(1500, 2720, 80);
-
-    // 병목 — 수직 파이프
-    this.createPipe(1760, 2760, 1760, 2810, { direction: 'vertical', gap: 80, color: 0x990000 });
-
-    // 수직 하강 → FINISH — 수직 파이프
-    this.createPipe(1760, 2810, 1760, 2880, { direction: 'vertical', gap: 80, color: 0x990000 });
-    this.createFloor(1720, 2880, 1800, 2880, 0x990000);
-
-    // Section 8 sensor
-    this.createSectionSensor(1760, 2700, 200, 30, 'sec8');
+    // TODO: 파이프 기반 재구현 예정
   }
 
   // ─── Finish Line ─────────────────────────────
 
   private buildFinishLine(): void {
-    // FINISH 센서 (x:1720~1800, y:2875~2905)
-    this.finishSensor = this.physics.createSensor(1760, 2885, 80, 30, 'finish');
-    this.bodies.push(this.finishSensor);
-
-    // 체커보드 패턴
-    const finishGfx = new Graphics();
-    const tileSize = 10;
-    for (let x = 1720; x < 1800; x += tileSize) {
-      for (let row = 0; row < 2; row++) {
-        const isWhite = ((x - 1720) / tileSize + row) % 2 === 0;
-        finishGfx.rect(x, 2878 + row * tileSize, tileSize, tileSize);
-        finishGfx.fill({ color: isWhite ? 0xffffff : 0x000000, alpha: 0.8 });
-      }
-    }
-    this.worldContainer.addChild(finishGfx);
-
-    const label = new Text({ text: 'FINISH', style: { fontFamily: FONT_DISPLAY, fontSize: 16, fill: COLORS.gold } });
-    label.anchor.set(0.5, 0);
-    label.position.set(1760, 2858);
-    this.worldContainer.addChild(label);
+    // TODO: 파이프 기반 재구현 시 FINISH 센서 재배치 예정
   }
 
   // ─── Update Loop (graphics sync) ─────────────
@@ -892,19 +798,6 @@ export class V5TrackBuilder {
       }
     };
     this.physics.onBeforeUpdate(this.updateHandler);
-  }
-
-  // ─── Test ─────────────────────────────────────
-
-  /** 직선 파이프 동작 확인용 — 필요 시 build()에서 제거 */
-  private buildTestPipe(): void {
-    this.createPipe(50, 150, 500, 150, { gap: 40, color: 0x00ffff });
-    const label = new Text({
-      text: '▶ createPipe TEST (수평)',
-      style: { fontFamily: FONT_DISPLAY, fontSize: 14, fill: 0x00ffff },
-    });
-    label.position.set(50, 120);
-    this.worldContainer.addChild(label);
   }
 
   // ─── Cleanup ──────────────────────────────────
