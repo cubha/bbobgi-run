@@ -48,6 +48,7 @@ export interface PipeOptions {
   arcStart?: number;        // 시작 각도 rad (default: 0)
   arcEnd?: number;          // 끝 각도 rad (default: Math.PI)
   arcSegments?: number;     // 다각형 근사 분할 수 (default: 24)
+  skipOuterWall?: boolean;  // outer arc 물리/그래픽 생략 (합류 교차점 blockage 방지용)
 }
 
 type PipeResult = { walls: Body[]; zone: { x1: number; y1: number; x2: number; y2: number } };
@@ -72,6 +73,12 @@ export class V5TrackBuilder {
   private finishSensor: Body | null = null;
   private sec2ExitX = 0;
   private sec2ExitY = 0;
+  private sec4FastX = 0;
+  private sec4FastY = 0;
+  private sec4SlowX = 0;
+  private sec4SlowY = 0;
+  private sec5ExitX = 0;
+  private sec5ExitY = 0;
   private readonly sectionSensors: Array<{ label: string; body: Body }> = [];
   private updateHandler: (() => void) | null = null;
 
@@ -99,6 +106,7 @@ export class V5TrackBuilder {
   getFinishSensor(): Body | null { return this.finishSensor; }
   getSectionSensors(): Array<{ label: string; body: Body }> { return this.sectionSensors; }
   getTrackBounds(): { minX: number; maxX: number } { return { minX: 10, maxX: V5_WORLD_W - 10 }; }
+  getSec5Exit(): { x: number; y: number } { return { x: this.sec5ExitX, y: this.sec5ExitY }; }
 
   // ─── Helpers ──────────────────────────────────
 
@@ -154,6 +162,7 @@ export class V5TrackBuilder {
       arcStart = 0,
       arcEnd = Math.PI,
       arcSegments = 24,
+      skipOuterWall = false,
     } = options ?? {};
     const halfGap = gap / 2;
     const walls: Body[] = [];
@@ -178,10 +187,12 @@ export class V5TrackBuilder {
 
       const innerBody = this.physics.createChain(innerPts, false, 0.01);
       this.bodies.push(innerBody); walls.push(innerBody);
-      const outerBody = this.physics.createChain(outerPts, false, 0.01);
-      this.bodies.push(outerBody); walls.push(outerBody);
+      if (!skipOuterWall) {
+        const outerBody = this.physics.createChain(outerPts, false, 0.01);
+        this.bodies.push(outerBody); walls.push(outerBody);
+      }
 
-      // 내부 채널 배경 (도넛 섹터)
+      // 내부 채널 배경 (도넛 섹터) — outer wall 없을 때는 inner arc만 표시
       const gFill = new Graphics();
       gFill.moveTo(cx + innerR * Math.cos(arcStart), cy + innerR * Math.sin(arcStart));
       gFill.arc(cx, cy, innerR, arcStart, arcEnd);
@@ -191,18 +202,21 @@ export class V5TrackBuilder {
       gFill.fill({ color: 0x1a1a2e, alpha: 0.25 });
       this.worldContainer.addChild(gFill);
 
-      // 내벽/외벽 스트로크
+      // 내벽 스트로크
       const gInner = new Graphics();
       gInner.moveTo(innerPts[0].x, innerPts[0].y);
       for (let i = 1; i < innerPts.length; i++) gInner.lineTo(innerPts[i].x, innerPts[i].y);
       gInner.stroke({ width: V5_FLOOR_THICK, color, alpha: 0.9 });
       this.worldContainer.addChild(gInner);
 
-      const gOuter = new Graphics();
-      gOuter.moveTo(outerPts[0].x, outerPts[0].y);
-      for (let i = 1; i < outerPts.length; i++) gOuter.lineTo(outerPts[i].x, outerPts[i].y);
-      gOuter.stroke({ width: V5_FLOOR_THICK, color, alpha: 0.9 });
-      this.worldContainer.addChild(gOuter);
+      // 외벽 스트로크 — skipOuterWall 시 생략
+      if (!skipOuterWall) {
+        const gOuter = new Graphics();
+        gOuter.moveTo(outerPts[0].x, outerPts[0].y);
+        for (let i = 1; i < outerPts.length; i++) gOuter.lineTo(outerPts[i].x, outerPts[i].y);
+        gOuter.stroke({ width: V5_FLOOR_THICK, color, alpha: 0.9 });
+        this.worldContainer.addChild(gOuter);
+      }
 
       return { walls, zone: { x1, y1, x2: cx + arcRadius, y2: cy + arcRadius } };
     }
@@ -293,7 +307,6 @@ export class V5TrackBuilder {
   }
 
   /** Create a windmill (kinematic rotating blades) */
-  // @ts-expect-error — 향후 SEC7 파이프 기반 재구현에서 사용 예정
   private createWindmill(x: number, y: number, r: number, blades = 4, speed = 2.0): void {
     const bladeThick = 10;
     const body = this.physics.createKinematicBody(x, y);
@@ -741,13 +754,138 @@ export class V5TrackBuilder {
     this.createSectionSensor(1635, 1590, 80, 30, 'sec4');
     this.createSectionSensor(fastVX, fastVY + 50, 100, 30, 'sec4-fast');
     this.createSectionSensor(slowVX, slowVY + 50, 100, 30, 'sec4-safe');
+
+    // ── SEC5 연결용 출구 좌표 저장 ────────────────────────────────────
+    // 수직 파이프 하단: 파이프 중심 X, 파이프 끝 Y (fastVY + 100)
+    this.sec4FastX = fastVX;
+    this.sec4FastY = fastVY + 100;
+    this.sec4SlowX = slowVX;
+    this.sec4SlowY = slowVY + 100;
   }
 
   // ════════════════════════════════════════════════════════════════
-  // SEC 5: 자유낙하 구간 (Y: 1700 → 1705, 컨테이너 출구 센서만)
+  // SEC 5: 합류 파이프 + 윈드밀  (Y: sec4FastY → sec5ExitY)
+  //
+  //   규칙: 모든 경로는 파이프, 꺾임은 반드시 curve
+  //
+  //   FAST(X≈637) : Curve1(하→우) → 우향파이프 → Curve2(우→하) ─┐
+  //                                                             ├→ (1400, mergeY) → 수직파이프 → 윈드밀
+  //   SLOW(X≈2163): Curve1(하→좌) → 좌향파이프 → Curve2(좌→하) ─┘
+  //
+  //   Curve2 FAST: center=(1340, fP2y+R), arcStart=-π/2, arcEnd=0   → exit (1400, mergeY)
+  //   Curve2 SLOW: center=(1460, sP2y+R), arcStart=-π/2, arcEnd=-π  → exit (1400, mergeY)
+  //   ∵ FY==SY (대칭) → fP2y==sP2y → 두 curve2 출구가 정확히 동일점 수렴
   // ════════════════════════════════════════════════════════════════
   private buildSEC5(): void {
-    // TODO: 파이프 기반 재구현 예정
+    const R     = 60;    // 모든 커브 반지름 (SEC2/SEC4와 통일)
+    const GAP   = 60;    // 파이프 내부 폭
+    const color = 0x0088cc;
+
+    const FX = this.sec4FastX;  // FAST 수직파이프 중심 X (≈637)
+    const FY = this.sec4FastY;  // FAST/SLOW 수직파이프 하단 Y (≈2228, FY==SY 수학적 보장)
+    const SX = this.sec4SlowX;  // SLOW 수직파이프 중심 X (≈2163)
+    const SY = this.sec4SlowY;  // (FY와 동일)
+
+    // ═══════════════════════════════════════════════════════
+    // FAST 경로: 하향→우향→하향 (S-커브로 중앙 X=1400 도달)
+    // ═══════════════════════════════════════════════════════
+
+    // ── Curve1-F: 하향→우향 ──────────────────────────────────────────
+    // center=(FX+R, FY), arcStart=π, arcEnd=π/2
+    // 입구: (FX+R+R*cos(π), FY+R*sin(π)) = (FX, FY) ← FAST 수직파이프 하단 ✓
+    // 출구: (FX+R, FY+R) ≈ (697, 2288), 방향: 우향
+    this.createPipe(FX + R, FY, 0, 0, {
+      direction: 'curve', arcRadius: R,
+      arcStart: Math.PI, arcEnd: Math.PI / 2,
+      gap: GAP, color,
+    });
+
+    // ── Pipe-F: 우향 경사 파이프 (slope 0.04 rad) ────────────────────
+    // 시작: curve1-F 출구 = (FX+R, FY+R)
+    // 끝: Curve2-F 입구 x=1340, y 계산
+    const fP1x = FX + R;                                         // ≈697
+    const fP1y = FY + R;                                         // ≈2288
+    const fP2x = 1340;
+    const fP2y = fP1y + (fP2x - fP1x) * Math.tan(0.04);        // ≈2314
+    this.createPipe(fP1x, fP1y, fP2x, fP2y, { gap: GAP, color });
+
+    // ── Curve2-F: 우향→하향 ──────────────────────────────────────────
+    // center=(fP2x, fP2y+R) = (1340, fP2y+60)
+    // arcStart=-π/2 (상단=fP2x좌표 입구), arcEnd=0 (우측=출구)
+    // 입구: center+(R*cos(-π/2), R*sin(-π/2)) = (fP2x, fP2y) ← Pipe-F 끝 ✓
+    // 출구: (fP2x+R, fP2y+R) = (1400, fP2y+R), 방향: 하향
+    // skipOuterWall: outer arc(R=90)가 파이프 내부(X=1370~1430)를 관통하므로 제거
+    const HALF   = GAP / 2;                // = 30
+    const mergeY = fP2y + R;              // 두 curve2가 만나는 Y 좌표 (≈2374)
+    this.createPipe(fP2x, mergeY, 0, 0, {
+      direction: 'curve', arcRadius: R,
+      arcStart: -Math.PI / 2, arcEnd: 0,
+      gap: GAP, color, skipOuterWall: true,
+    });
+    // 마감벽 (ㅡ) — outer arc 제거로 열린 상단 빈공간을 수평선으로 밀봉
+    // Y = fP2y - HALF (= Pipe-F 상단벽 끝 높이), X: fP2x → fP2x+R+HALF
+    this.createFloor(fP2x, fP2y - HALF, fP2x + R + HALF, fP2y - HALF, color);
+
+    // ═══════════════════════════════════════════════════════
+    // SLOW 경로: 하향→좌향→하향 (S-커브로 중앙 X=1400 도달)
+    // ═══════════════════════════════════════════════════════
+
+    // ── Curve1-S: 하향→좌향 ──────────────────────────────────────────
+    // center=(SX-R, SY), arcStart=0, arcEnd=π/2
+    // 입구: (SX-R+R, SY) = (SX, SY) ← SLOW 수직파이프 하단 ✓
+    // 출구: (SX-R, SY+R) ≈ (2103, 2288), 방향: 좌향
+    this.createPipe(SX - R, SY, 0, 0, {
+      direction: 'curve', arcRadius: R,
+      arcStart: 0, arcEnd: Math.PI / 2,
+      gap: GAP, color,
+    });
+
+    // ── Pipe-S: 좌향 경사 파이프 (slope 0.04 rad) ────────────────────
+    // 시작: curve1-S 출구 = (SX-R, SY+R)
+    // 끝: Curve2-S 입구 x=1460, y 계산
+    // ∵ FY==SY, (fP2x-fP1x)==(sP1x-sP2x)=643 → sP2y==fP2y (대칭 보장)
+    const sP1x = SX - R;                                         // ≈2103
+    const sP1y = SY + R;                                         // ≈2288 (== fP1y)
+    const sP2x = 1460;
+    const sP2y = sP1y + (sP1x - sP2x) * Math.tan(0.04);        // ≈2314 (== fP2y)
+    this.createPipe(sP1x, sP1y, sP2x, sP2y, { gap: GAP, color });
+
+    // ── Curve2-S: 좌향→하향 ──────────────────────────────────────────
+    // center=(sP2x, sP2y+R) = (1460, sP2y+60)
+    // arcStart=-π/2 (상단=sP2x입구), arcEnd=-π (좌측=출구)
+    // 입구: (sP2x, sP2y) ← Pipe-S 끝 ✓
+    // 출구: (sP2x-R, sP2y+R) = (1400, sP2y+R) = (1400, mergeY) ← Curve2-F와 동일 수렴점 ✓
+    // skipOuterWall: outer arc(R=90)가 파이프 내부(X=1370~1430)를 관통하므로 제거
+    this.createPipe(sP2x, sP2y + R, 0, 0, {
+      direction: 'curve', arcRadius: R,
+      arcStart: -Math.PI / 2, arcEnd: -Math.PI,
+      gap: GAP, color, skipOuterWall: true,
+    });
+    // 마감벽 (ㅡ) — outer arc 제거로 열린 상단 빈공간을 수평선으로 밀봉
+    // Y = sP2y - HALF, X: sP2x-R-HALF → sP2x
+    this.createFloor(sP2x - R - HALF, sP2y - HALF, sP2x, sP2y - HALF, color);
+
+    // ═══════════════════════════════════════════════════════
+    // 합류 수직파이프 + 윈드밀
+    // ═══════════════════════════════════════════════════════
+
+    // ── 수직 슈트: mergeY → sec5ExitY ───────────────────────────────
+    // FAST/SLOW curve2 모두 (1400, mergeY)에서 하향 출구 → 수직 파이프로 직결
+    const MID_X   = 1400;
+    const chuteY2 = mergeY + 110;   // ≈2484
+    this.createPipe(MID_X, mergeY, MID_X, chuteY2, {
+      direction: 'vertical', gap: GAP, color,
+    });
+
+    // ── 윈드밀 (수직 슈트 하단) ──────────────────────────────────────
+    // 반지름 22 < GAP/2=30 → 날개~벽 간격 8px. 끼임방지: 간격 > 구슬반지름(10px)? ←
+    // 8px < 10px이므로 r=20으로 설정: 간격=10px 정확히 → 경계에서 통과
+    this.createWindmill(MID_X, chuteY2 - 30, 20, 4, 1.5);
+
+    // ── 섹션 센서 + 출구 저장 ───────────────────────────────────────
+    this.createSectionSensor(MID_X, mergeY + 40, GAP + 20, 30, 'sec5');
+    this.sec5ExitX = MID_X;
+    this.sec5ExitY = chuteY2;
   }
 
   // ════════════════════════════════════════════════════════════════
