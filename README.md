@@ -23,7 +23,7 @@
 | # | 모드 | 특성 | 물리엔진 | 시간 |
 |---|---|---|---|---|
 | 1 | **경마 (Horse Racing)** | 횡스크롤 레이스, 랜덤 속도 변화 | 불필요 | 30초 |
-| 2 | **구슬 레이스 (Marble Race)** | V5 어드벤처 코스 — 깔때기(SEC1)→플링코(SEC2-3)→분기FAST/SAFE(SEC4)→물레방아(SEC5)→카오스(SEC6)→분기VORTEX/SPRINT(SEC7)→파이널(SEC8) | Planck.js | 완주 기반 |
+| 2 | **구슬 레이스 (Marble Race)** | V5 어드벤처 코스 — 깔때기(SEC1)→S채널(SEC2)→플링코(SEC3)→분기FAST/SLOW(SEC4)→합류S-커브(SEC5)→대형윈드밀(SEC6)→분기VORTEX/SPRINT(SEC7)→파이널(SEC8) | Planck.js | 완주 기반 |
 | 3 | **사다리타기** | 자동 생성 사다리, 라인 애니메이션 | 불필요 | ~20초 |
 | 4 | **핀볼/파친코 (Pachinko)** | 공이 핀에 부딪히며 하강 | Planck.js | 20~30초 |
 
@@ -182,12 +182,10 @@ src/
 - [x] SEC4 챔버-파이프 연결부 갭 제거 — 유도경사 `createFloor` → `createPipe(gap=60)` 교체로 코너커브 외벽(y≈1960)과 seamless 연결, 챔버 좌/우벽 하한을 `CHAMBER_BOT+30` → `CHAMBER_BOT`으로 축소
 - [x] SEC4 커브 파이프 직결 재설계 — V자 바닥+코너커브 → 역V자 바닥+90° 커브 파이프(SEC1→SEC2 패턴) 방식으로 교체, FAST/SLOW 사선 파이프 대칭화(dx=±320), 역V 꼭대기 12px 우측 오프셋으로 분기 밸런스 보정
 - [x] SEC3 플링코 하단 벽 좌표 정합 — 좌우벽 끝점을 경사 바닥(BOT-20)과 일치시켜 라인 삐져나옴 방지
-<<<<<<< HEAD
-- [x] SEC5 합류파이프+윈드밀 — FAST/SLOW 출구 S-커브 대칭 합류(FY==SY 수학 보장, dx=±643) → 중앙 X=1400 수직파이프 → 윈드밀(r=20) 장애물
+- [x] SEC5 합류파이프 — FAST/SLOW 출구 S-커브 대칭 합류(FY==SY 수학 보장, dx=±643) → 중앙 X=1400 수직파이프 → SEC6 직결
 - [x] `createPipe` `skipOuterWall` 옵션 — curve 교차점 outer arc 물리/그래픽 선택 제거로 합류 지점 구슬 차단 해결
 - [x] 수평 마감벽(ㅡ) — skipOuterWall 제거 후 상단 빈공간을 수평선(Y=fP2y-GAP/2)으로 밀봉 (구슬 흐름 경로 위, 비차단)
-=======
->>>>>>> origin/main
+- [x] SEC6 대형 윈드밀 박스 — 합류파이프 상단 직결(SEC4 챔버 패턴), 6-spoke R=150 개방형 윈드밀(박스 82% fill), 원형 림 제거로 구슬 자유 통과
 - [ ] 사다리타기: 복잡한 구조 + 카오스 이벤트 시스템
 - [ ] 파친코: 함정/변수 추가 + 단일 골 구조 + 공 개수 설정
 - [ ] NetworkManager — Supabase Realtime 호스트-게스트 실시간 통신
@@ -247,10 +245,8 @@ bash verify.sh
 
 | 날짜 | 분류 | 증상 | 원인 | 해결 |
 |---|---|---|---|---|
-<<<<<<< HEAD
+| 2026-04-12 | 버그 수정 | SEC5 원형 림으로 구슬 진입 불가 | 정적 ChainShape 루프(R=90)가 윈드밀 진입구를 완전 차단 | 원형 림 제거, SEC6을 박스+개방형 6-spoke 윈드밀로 재설계, 합류파이프가 박스 상단으로 직결 |
 | 2026-04-09 | 버그 수정 | SEC5 합류 교차점에서 구슬 통과 불가 | Curve2-F/S의 outer arc(R=90)가 수직파이프 내부(X=1370~1430)를 관통하며 물리 벽 형성 | `createPipe`에 `skipOuterWall` 옵션 추가, outer arc 제거 후 수평 마감벽(Y=fP2y-30)으로 상단 밀봉 |
-=======
->>>>>>> origin/main
 | 2026-04-06 | 재설계 | SEC4 챔버→FAST/SLOW 파이프 연결 끊김 + 우측 편향 80%+ | V자 바닥+코너커브 방식의 복잡한 각도 계산으로 연결점 불일치, SLOW 사선(dx=170)이 FAST(dx=320)보다 짧아 굴곡 발생 | 역V자 바닥+90° 커브 파이프(SEC1→SEC2 패턴) 직결 방식으로 교체, FAST/SLOW 사선 대칭화(dx=±320), 역V 꼭대기 12px 우측 오프셋으로 밸런스 보정 |
 | 2026-04-05 | 버그 수정 | SEC4 챔버 하단~코너커브 외벽 사이 30px 갭 — 구슬 FAST/SLOW 경로 이탈 | 유도경사(`createFloor`) gap 없는 단일 선분으로 코너커브 외벽(y≈1960)까지 연결이 안 됨; 챔버벽 하한(y=1930)보다 커브 외벽이 30px 아래에서 시작 | 유도경사를 `createPipe(gap=60)`으로 교체(파이프 외벽이 코너커브 외벽과 수학적으로 일치), 챔버 좌/우벽 하한을 `CHAMBER_BOT`으로 축소 |
 | 2026-03-28 | 버그 수정 | V3 트랙 전 구간에서 구슬 끼임 (완주 불가) | ChannelRampSegment `signedAngle = -angle * direction` 부호 반전으로 경사 방향이 설계와 반대 | `signedAngle = angle * direction`으로 수정 + noCeiling 옵션 + CurvedChannel 가이드벽 제거 + SEC4 출구 재정렬. 10명×10회 반복 100% 완주 달성 |

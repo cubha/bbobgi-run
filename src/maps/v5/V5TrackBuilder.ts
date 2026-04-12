@@ -25,8 +25,8 @@ const SECTIONS = [
   { name: 'SEC2: S-채널 3단', y1: 370, y2: 770 },
   { name: 'SEC3: 플링코', y1: 760, y2: 1230 },
   { name: 'SEC4: 분기1 FAST/SAFE', y1: 1230, y2: 1680 },
-  { name: 'SEC5: 물레방아 리프트', y1: 1680, y2: 1960 },
-  { name: 'SEC6: 카오스 존', y1: 1860, y2: 2290 },
+  { name: 'SEC5: 합류 S-커브', y1: 2228, y2: 2484 },
+  { name: 'SEC6: 대형 윈드밀', y1: 2484, y2: 2864 },
   { name: 'SEC7: 분기2 VORTEX/SPRINT', y1: 2270, y2: 2640 },
   { name: 'SEC8: 파이널 스프린트', y1: 2640, y2: 2900 },
 ];
@@ -76,9 +76,11 @@ export class V5TrackBuilder {
   private sec4FastX = 0;
   private sec4FastY = 0;
   private sec4SlowX = 0;
-  private sec4SlowY = 0;
+
   private sec5ExitX = 0;
   private sec5ExitY = 0;
+  private sec6ExitX = 0;
+  private sec6ExitY = 0;
   private readonly sectionSensors: Array<{ label: string; body: Body }> = [];
   private updateHandler: (() => void) | null = null;
 
@@ -107,6 +109,7 @@ export class V5TrackBuilder {
   getSectionSensors(): Array<{ label: string; body: Body }> { return this.sectionSensors; }
   getTrackBounds(): { minX: number; maxX: number } { return { minX: 10, maxX: V5_WORLD_W - 10 }; }
   getSec5Exit(): { x: number; y: number } { return { x: this.sec5ExitX, y: this.sec5ExitY }; }
+  getSec6Exit(): { x: number; y: number } { return { x: this.sec6ExitX, y: this.sec6ExitY }; }
 
   // ─── Helpers ──────────────────────────────────
 
@@ -304,35 +307,6 @@ export class V5TrackBuilder {
     g.fill({ color, alpha: 0.9 });
     g.position.set(x, y);
     this.worldContainer.addChild(g);
-  }
-
-  /** Create a windmill (kinematic rotating blades) */
-  private createWindmill(x: number, y: number, r: number, blades = 4, speed = 2.0): void {
-    const bladeThick = 10;
-    const body = this.physics.createKinematicBody(x, y);
-    this.bodies.push(body);
-    for (let i = 0; i < blades; i++) {
-      const angle = i * ((Math.PI * 2) / blades);
-      body.createFixture(new BoxShape(r, bladeThick / 2, new Vec2(0, 0), angle), { restitution: 0.6, friction: 0.1 });
-    }
-    body.setAngularVelocity(speed);
-    const gfxContainer = new Container();
-    gfxContainer.position.set(x, y);
-    for (let i = 0; i < blades; i++) {
-      const angle = i * ((Math.PI * 2) / blades);
-      const g = new Graphics();
-      g.rect(-r, -bladeThick / 2, r * 2, bladeThick);
-      g.fill({ color: COLORS.orange });
-      g.rotation = angle;
-      gfxContainer.addChild(g);
-    }
-    this.worldContainer.addChild(gfxContainer);
-    const hub = new Graphics();
-    hub.circle(0, 0, 5);
-    hub.fill({ color: 0xffffff });
-    hub.position.set(x, y);
-    this.worldContainer.addChild(hub);
-    this.obstacles.push({ body, gfxContainer, type: 'windmill' });
   }
 
   /** Create a seesaw (dynamic beam on revolute joint) */
@@ -760,139 +734,187 @@ export class V5TrackBuilder {
     this.sec4FastX = fastVX;
     this.sec4FastY = fastVY + 100;
     this.sec4SlowX = slowVX;
-    this.sec4SlowY = slowVY + 100;
+    // sec4SlowY removed — FY==SY 수학적 보장으로 sec4FastY만 사용
   }
 
   // ════════════════════════════════════════════════════════════════
-  // SEC 5: 합류 파이프 + 윈드밀  (Y: sec4FastY → sec5ExitY)
+  // SEC 5: FAST/SLOW 합류 S-커브 + 수직 슈트  (Y: sec4FastY → sec5ExitY)
   //
-  //   규칙: 모든 경로는 파이프, 꺾임은 반드시 curve
+  //   FAST(X≈637) : Curve1(하→우) → 우향파이프 → Curve2(우→하, skipOuter) ─┐
+  //                                                                         ├→ (1400, mergeY) → 수직슈트 → SEC6
+  //   SLOW(X≈2163): Curve1(하→좌) → 좌향파이프 → Curve2(좌→하, skipOuter) ─┘
   //
-  //   FAST(X≈637) : Curve1(하→우) → 우향파이프 → Curve2(우→하) ─┐
-  //                                                             ├→ (1400, mergeY) → 수직파이프 → 윈드밀
-  //   SLOW(X≈2163): Curve1(하→좌) → 좌향파이프 → Curve2(좌→하) ─┘
-  //
-  //   Curve2 FAST: center=(1340, fP2y+R), arcStart=-π/2, arcEnd=0   → exit (1400, mergeY)
-  //   Curve2 SLOW: center=(1460, sP2y+R), arcStart=-π/2, arcEnd=-π  → exit (1400, mergeY)
-  //   ∵ FY==SY (대칭) → fP2y==sP2y → 두 curve2 출구가 정확히 동일점 수렴
+  //   Curve2-F: center=(1340, fP2y+R), arcStart=-π/2, arcEnd=0  → exit (1400, mergeY)
+  //   Curve2-S: center=(1460, sP2y+R), arcStart=-π/2, arcEnd=-π → exit (1400, mergeY)
+  //   ∵ FY==SY → fP2y==sP2y → 두 Curve2 출구가 정확히 (1400, mergeY) 수렴
   // ════════════════════════════════════════════════════════════════
   private buildSEC5(): void {
-    const R     = 60;    // 모든 커브 반지름 (SEC2/SEC4와 통일)
-    const GAP   = 60;    // 파이프 내부 폭
+    const R     = 60;
+    const GAP   = 60;
+    const HALF  = GAP / 2;
     const color = 0x0088cc;
 
-    const FX = this.sec4FastX;  // FAST 수직파이프 중심 X (≈637)
-    const FY = this.sec4FastY;  // FAST/SLOW 수직파이프 하단 Y (≈2228, FY==SY 수학적 보장)
-    const SX = this.sec4SlowX;  // SLOW 수직파이프 중심 X (≈2163)
-    const SY = this.sec4SlowY;  // (FY와 동일)
+    const FX = this.sec4FastX;   // ≈637
+    const FY = this.sec4FastY;   // ≈2228  (FY==SY 수학적 보장)
+    const SX = this.sec4SlowX;  // ≈2163
 
     // ═══════════════════════════════════════════════════════
-    // FAST 경로: 하향→우향→하향 (S-커브로 중앙 X=1400 도달)
+    // FAST 경로: 하향→우향→하향
     // ═══════════════════════════════════════════════════════
 
-    // ── Curve1-F: 하향→우향 ──────────────────────────────────────────
-    // center=(FX+R, FY), arcStart=π, arcEnd=π/2
-    // 입구: (FX+R+R*cos(π), FY+R*sin(π)) = (FX, FY) ← FAST 수직파이프 하단 ✓
-    // 출구: (FX+R, FY+R) ≈ (697, 2288), 방향: 우향
+    // Curve1-F: center=(FX+R, FY), arcStart=π→π/2
     this.createPipe(FX + R, FY, 0, 0, {
       direction: 'curve', arcRadius: R,
       arcStart: Math.PI, arcEnd: Math.PI / 2,
       gap: GAP, color,
     });
 
-    // ── Pipe-F: 우향 경사 파이프 (slope 0.04 rad) ────────────────────
-    // 시작: curve1-F 출구 = (FX+R, FY+R)
-    // 끝: Curve2-F 입구 x=1340, y 계산
-    const fP1x = FX + R;                                         // ≈697
-    const fP1y = FY + R;                                         // ≈2288
+    // Pipe-F: 우향 경사 (slope 0.04 rad)
+    const fP1x = FX + R;
+    const fP1y = FY + R;
     const fP2x = 1340;
-    const fP2y = fP1y + (fP2x - fP1x) * Math.tan(0.04);        // ≈2314
+    const fP2y = fP1y + (fP2x - fP1x) * Math.tan(0.04);
     this.createPipe(fP1x, fP1y, fP2x, fP2y, { gap: GAP, color });
 
-    // ── Curve2-F: 우향→하향 ──────────────────────────────────────────
-    // center=(fP2x, fP2y+R) = (1340, fP2y+60)
-    // arcStart=-π/2 (상단=fP2x좌표 입구), arcEnd=0 (우측=출구)
-    // 입구: center+(R*cos(-π/2), R*sin(-π/2)) = (fP2x, fP2y) ← Pipe-F 끝 ✓
-    // 출구: (fP2x+R, fP2y+R) = (1400, fP2y+R), 방향: 하향
-    // skipOuterWall: outer arc(R=90)가 파이프 내부(X=1370~1430)를 관통하므로 제거
-    const HALF   = GAP / 2;                // = 30
-    const mergeY = fP2y + R;              // 두 curve2가 만나는 Y 좌표 (≈2374)
+    // Curve2-F: center=(fP2x, fP2y+R), arcStart=-π/2→0 (skipOuterWall)
+    const mergeY = fP2y + R;
     this.createPipe(fP2x, mergeY, 0, 0, {
       direction: 'curve', arcRadius: R,
       arcStart: -Math.PI / 2, arcEnd: 0,
       gap: GAP, color, skipOuterWall: true,
     });
-    // 마감벽 (ㅡ) — outer arc 제거로 열린 상단 빈공간을 수평선으로 밀봉
-    // Y = fP2y - HALF (= Pipe-F 상단벽 끝 높이), X: fP2x → fP2x+R+HALF
     this.createFloor(fP2x, fP2y - HALF, fP2x + R + HALF, fP2y - HALF, color);
 
     // ═══════════════════════════════════════════════════════
-    // SLOW 경로: 하향→좌향→하향 (S-커브로 중앙 X=1400 도달)
+    // SLOW 경로: 하향→좌향→하향
     // ═══════════════════════════════════════════════════════
 
-    // ── Curve1-S: 하향→좌향 ──────────────────────────────────────────
-    // center=(SX-R, SY), arcStart=0, arcEnd=π/2
-    // 입구: (SX-R+R, SY) = (SX, SY) ← SLOW 수직파이프 하단 ✓
-    // 출구: (SX-R, SY+R) ≈ (2103, 2288), 방향: 좌향
-    this.createPipe(SX - R, SY, 0, 0, {
+    // Curve1-S: center=(SX-R, FY), arcStart=0→π/2
+    this.createPipe(SX - R, FY, 0, 0, {
       direction: 'curve', arcRadius: R,
       arcStart: 0, arcEnd: Math.PI / 2,
       gap: GAP, color,
     });
 
-    // ── Pipe-S: 좌향 경사 파이프 (slope 0.04 rad) ────────────────────
-    // 시작: curve1-S 출구 = (SX-R, SY+R)
-    // 끝: Curve2-S 입구 x=1460, y 계산
-    // ∵ FY==SY, (fP2x-fP1x)==(sP1x-sP2x)=643 → sP2y==fP2y (대칭 보장)
-    const sP1x = SX - R;                                         // ≈2103
-    const sP1y = SY + R;                                         // ≈2288 (== fP1y)
+    // Pipe-S: 좌향 경사 (slope 0.04 rad, FY==SY → sP2y==fP2y 대칭 보장)
+    const sP1x = SX - R;
+    const sP1y = FY + R;
     const sP2x = 1460;
-    const sP2y = sP1y + (sP1x - sP2x) * Math.tan(0.04);        // ≈2314 (== fP2y)
+    const sP2y = sP1y + (sP1x - sP2x) * Math.tan(0.04);
     this.createPipe(sP1x, sP1y, sP2x, sP2y, { gap: GAP, color });
 
-    // ── Curve2-S: 좌향→하향 ──────────────────────────────────────────
-    // center=(sP2x, sP2y+R) = (1460, sP2y+60)
-    // arcStart=-π/2 (상단=sP2x입구), arcEnd=-π (좌측=출구)
-    // 입구: (sP2x, sP2y) ← Pipe-S 끝 ✓
-    // 출구: (sP2x-R, sP2y+R) = (1400, sP2y+R) = (1400, mergeY) ← Curve2-F와 동일 수렴점 ✓
-    // skipOuterWall: outer arc(R=90)가 파이프 내부(X=1370~1430)를 관통하므로 제거
+    // Curve2-S: center=(sP2x, sP2y+R), arcStart=-π/2→-π (skipOuterWall)
     this.createPipe(sP2x, sP2y + R, 0, 0, {
       direction: 'curve', arcRadius: R,
       arcStart: -Math.PI / 2, arcEnd: -Math.PI,
       gap: GAP, color, skipOuterWall: true,
     });
-    // 마감벽 (ㅡ) — outer arc 제거로 열린 상단 빈공간을 수평선으로 밀봉
-    // Y = sP2y - HALF, X: sP2x-R-HALF → sP2x
     this.createFloor(sP2x - R - HALF, sP2y - HALF, sP2x, sP2y - HALF, color);
 
     // ═══════════════════════════════════════════════════════
-    // 합류 수직파이프 + 윈드밀
+    // 합류 수직 슈트 → SEC6 진입
     // ═══════════════════════════════════════════════════════
-
-    // ── 수직 슈트: mergeY → sec5ExitY ───────────────────────────────
-    // FAST/SLOW curve2 모두 (1400, mergeY)에서 하향 출구 → 수직 파이프로 직결
     const MID_X   = 1400;
-    const chuteY2 = mergeY + 110;   // ≈2484
+    const chuteY2 = mergeY + 110;  // ≈2484
+
     this.createPipe(MID_X, mergeY, MID_X, chuteY2, {
       direction: 'vertical', gap: GAP, color,
     });
 
-    // ── 윈드밀 (수직 슈트 하단) ──────────────────────────────────────
-    // 반지름 22 < GAP/2=30 → 날개~벽 간격 8px. 끼임방지: 간격 > 구슬반지름(10px)? ←
-    // 8px < 10px이므로 r=20으로 설정: 간격=10px 정확히 → 경계에서 통과
-    this.createWindmill(MID_X, chuteY2 - 30, 20, 4, 1.5);
-
-    // ── 섹션 센서 + 출구 저장 ───────────────────────────────────────
     this.createSectionSensor(MID_X, mergeY + 40, GAP + 20, 30, 'sec5');
     this.sec5ExitX = MID_X;
     this.sec5ExitY = chuteY2;
   }
 
   // ════════════════════════════════════════════════════════════════
-  // SEC 6: 카오스 존 (Y: 1705 → 2290) — 통합 좌향 슬로프
+  // SEC 6: 대형 윈드밀 박스  (Y: sec5ExitY → sec6ExitY)
+  //
+  //   SEC4 챔버 진입 패턴과 동일 — 합류파이프가 박스 상단 중앙으로 직결
+  //
+  //  BOX_L ──────── [입구 1370~1430] ────────── BOX_R   ← BOX_TOP (sec5ExitY)
+  //   │                                              │
+  //   │          ⊕ 대형 윈드밀 R=150                 │   박스 내부: 윈드밀 지름 300px
+  //   │            6-spoke, 1.0 rad/s               │   박스 폭 360px → 83% fill
+  //   │                                              │
+  //  BOX_L ──────── [출구 1370~1430] ────────── BOX_R   ← BOX_BOT
+  //                        ↓ 수직파이프 → SEC7
   // ════════════════════════════════════════════════════════════════
   private buildSEC6(): void {
-    // TODO: 파이프 기반 재구현 예정
+    const GAP   = 60;
+    const HALF  = GAP / 2;   // 30
+    const color = 0xcc6600;
+
+    const MID_X   = this.sec5ExitX;   // 1400
+    const BOX_TOP = this.sec5ExitY;   // ≈2484
+
+    // ── 박스 치수 ───────────────────────────────────────────────
+    const R_W     = 150;               // 윈드밀 반지름
+    const MARGIN  = 30;                // 살대 팁 ~ 벽 여유
+    const spkLen  = R_W - 10;         // 140px (살대 길이)
+    const BOX_L   = MID_X - spkLen - MARGIN;   // ≈1230
+    const BOX_R   = MID_X + spkLen + MARGIN;   // ≈1570
+    const BOX_H   = 2 * (R_W + MARGIN + 10);   // ≈380px
+    const BOX_BOT = BOX_TOP + BOX_H;            // ≈2864
+
+    const WX = MID_X;                  // 1400
+    const WY = BOX_TOP + BOX_H / 2;   // ≈2674 (박스 수직 중앙)
+
+    // ── 1) 상단 벽: 합류파이프 진입구(MID_X±30) 개방 ─────────
+    this.createFloor(BOX_L, BOX_TOP, MID_X - HALF, BOX_TOP, color);
+    this.createFloor(MID_X + HALF, BOX_TOP, BOX_R, BOX_TOP, color);
+
+    // ── 2) 좌/우 외벽 ─────────────────────────────────────────
+    this.createWall(BOX_L, BOX_TOP, BOX_BOT, color);
+    this.createWall(BOX_R, BOX_TOP, BOX_BOT, color);
+
+    // ── 3) 하단 벽: 출구(MID_X±30) 개방 ─────────────────────
+    this.createFloor(BOX_L, BOX_BOT, MID_X - HALF, BOX_BOT, color);
+    this.createFloor(MID_X + HALF, BOX_BOT, BOX_R, BOX_BOT, color);
+
+    // ── 4) 대형 윈드밀 (림 없음, 6-spoke) ────────────────────
+    //   살대 간격 ≈ (2π×140/6) ≈ 147px ≫ 구슬 지름 20px → 자유 통과
+    //   지름 300px / 박스 폭 340px ≈ 88% fill ("거의 꽉차도록")
+    const SPOKE  = 6;
+    const spkThk = 12;
+    const wheelBody = this.physics.createKinematicBody(WX, WY);
+    this.bodies.push(wheelBody);
+    for (let i = 0; i < SPOKE; i++) {
+      const a = i * ((Math.PI * 2) / SPOKE);
+      wheelBody.createFixture(
+        new BoxShape(spkLen, spkThk / 2, new Vec2(0, 0), a),
+        { restitution: 0.3, friction: 0.5 },
+      );
+    }
+    wheelBody.setAngularVelocity(1.0);
+
+    // 윈드밀 그래픽
+    const wheelGfx = new Container();
+    wheelGfx.position.set(WX, WY);
+    for (let i = 0; i < SPOKE; i++) {
+      const a = i * ((Math.PI * 2) / SPOKE);
+      const g = new Graphics();
+      g.rect(-spkLen, -spkThk / 2, spkLen * 2, spkThk);
+      g.fill({ color: COLORS.orange, alpha: 0.9 });
+      g.rotation = a;
+      wheelGfx.addChild(g);
+    }
+    const hub = new Graphics();
+    hub.circle(0, 0, 18);
+    hub.fill({ color: 0xffffff });
+    hub.stroke({ width: 3, color: 0xaaaaaa });
+    wheelGfx.addChild(hub);
+    this.worldContainer.addChild(wheelGfx);
+    this.obstacles.push({ body: wheelBody, gfxContainer: wheelGfx, type: 'windmill' });
+
+    // ── 5) 출구 수직 파이프 + 섹션 센서 ─────────────────────
+    // BOX_BOT≈2864, EXIT_Y2=2894 < V5_WORLD_H=2900 ✓
+    const EXIT_Y2 = BOX_BOT + 30;
+    this.createPipe(MID_X, BOX_BOT, MID_X, EXIT_Y2, {
+      direction: 'vertical', gap: GAP, color,
+    });
+    this.createSectionSensor(WX, WY, GAP + 20, 40, 'sec6');
+    this.sec6ExitX = MID_X;
+    this.sec6ExitY = EXIT_Y2;
   }
 
   // ════════════════════════════════════════════════════════════════
