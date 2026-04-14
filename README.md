@@ -23,7 +23,7 @@
 | # | 모드 | 특성 | 물리엔진 | 시간 |
 |---|---|---|---|---|
 | 1 | **경마 (Horse Racing)** | 횡스크롤 레이스, 랜덤 속도 변화 | 불필요 | 30초 |
-| 2 | **구슬 레이스 (Marble Race)** | V5 어드벤처 코스 — 깔때기(SEC1)→S채널(SEC2)→플링코(SEC3)→분기FAST/SLOW(SEC4)→합류S-커브(SEC5)→대형윈드밀(SEC6)→분기VORTEX/SPRINT(SEC7)→파이널(SEC8) | Planck.js | 완주 기반 |
+| 2 | **구슬 레이스 (Marble Race)** | V5 어드벤처 코스 — 깔때기(SEC1)→S채널(SEC2)→플링코(SEC3)→분기FAST/SLOW(SEC4)→합류S-커브(SEC5)→대형윈드밀(SEC6)→카오스존(SEC7)→분기VORTEX/SPRINT(SPLIT2)→파이널(SEC8) | Planck.js | 완주 기반 |
 | 3 | **사다리타기** | 자동 생성 사다리, 라인 애니메이션 | 불필요 | ~20초 |
 | 4 | **핀볼/파친코 (Pachinko)** | 공이 핀에 부딪히며 하강 | Planck.js | 20~30초 |
 
@@ -186,6 +186,11 @@ src/
 - [x] `createPipe` `skipOuterWall` 옵션 — curve 교차점 outer arc 물리/그래픽 선택 제거로 합류 지점 구슬 차단 해결
 - [x] 수평 마감벽(ㅡ) — skipOuterWall 제거 후 상단 빈공간을 수평선(Y=fP2y-GAP/2)으로 밀봉 (구슬 흐름 경로 위, 비차단)
 - [x] SEC6 대형 윈드밀 박스 — 합류파이프 상단 직결(SEC4 챔버 패턴), 6-spoke R=150 개방형 윈드밀(박스 82% fill), 원형 림 제거로 구슬 자유 통과
+- [x] SEC4/SPLIT2 핀존(5행)+물레방아 분기 균등화 — 방향성 관성 대응 plinko 핀(80px 간격, 5행)+중앙 R=60 물레방아 조합으로 공정 분배
+- [x] SEC7 카오스존 — CH1(우→좌)+윈드밀×2+시소, 수직낙하, CH2(좌→우)+시소+윈드밀, Curve4 U-턴, GAP=120 통일
+- [x] SEC-SPLIT2 VORTEX/SPRINT 분기 — 챔버+핀존(5행)+역방향 물레방아+S-커브(VORTEX)/직선(SPRINT) 분리 경로 → 중앙 합류
+- [x] SEC8 파이널 스프린트 — 시소+수직낙하(X=240) → FINISH 센서
+- [x] SEC7 상대좌표화 + SPLIT2 좌표 cascade 정합 — buildSEC7을 B=sec6ExitY 기준 상대좌표로 재작성, SPLIT2 진입/챔버/핀존/VORTEX/SPRINT 전체 S7=sec7ExitY 기준 재정렬, V5_FINISH_Y 5754→5954, V5_WORLD_H 6000→6200
 - [ ] 사다리타기: 복잡한 구조 + 카오스 이벤트 시스템
 - [ ] 파친코: 함정/변수 추가 + 단일 골 구조 + 공 개수 설정
 - [ ] NetworkManager — Supabase Realtime 호스트-게스트 실시간 통신
@@ -245,6 +250,7 @@ bash verify.sh
 
 | 날짜 | 분류 | 증상 | 원인 | 해결 |
 |---|---|---|---|---|
+| 2026-04-14 | 버그 수정 | SEC5→SEC6→SEC7 파이프 연결 꼬임 — 구슬 이탈/끼임으로 진행 불가 | SEC4 챔버 +200px 확장이 SEC5/SEC6 상대좌표로 전파됐으나 SEC7은 고정값(y=2894) 사용 → sec6ExitY(≈3094)보다 200px 위에 SEC7이 물리적으로 배치돼 중첩 충돌 | `buildSEC7` 전체를 `B=sec6ExitY` 기준 상대좌표로 재작성, `sec7ExitY` 필드 추가, `buildSPLIT2` 전체를 `S7=sec7ExitY` 기준으로 재정렬 |
 | 2026-04-12 | 버그 수정 | SEC5 원형 림으로 구슬 진입 불가 | 정적 ChainShape 루프(R=90)가 윈드밀 진입구를 완전 차단 | 원형 림 제거, SEC6을 박스+개방형 6-spoke 윈드밀로 재설계, 합류파이프가 박스 상단으로 직결 |
 | 2026-04-09 | 버그 수정 | SEC5 합류 교차점에서 구슬 통과 불가 | Curve2-F/S의 outer arc(R=90)가 수직파이프 내부(X=1370~1430)를 관통하며 물리 벽 형성 | `createPipe`에 `skipOuterWall` 옵션 추가, outer arc 제거 후 수평 마감벽(Y=fP2y-30)으로 상단 밀봉 |
 | 2026-04-06 | 재설계 | SEC4 챔버→FAST/SLOW 파이프 연결 끊김 + 우측 편향 80%+ | V자 바닥+코너커브 방식의 복잡한 각도 계산으로 연결점 불일치, SLOW 사선(dx=170)이 FAST(dx=320)보다 짧아 굴곡 발생 | 역V자 바닥+90° 커브 파이프(SEC1→SEC2 패턴) 직결 방식으로 교체, FAST/SLOW 사선 대칭화(dx=±320), 역V 꼭대기 12px 우측 오프셋으로 밸런스 보정 |
