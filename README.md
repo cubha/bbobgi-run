@@ -191,6 +191,11 @@ src/
 - [x] SEC-SPLIT2 VORTEX/SPRINT 분기 — 챔버+핀존(5행)+역방향 물레방아+S-커브(VORTEX)/직선(SPRINT) 분리 경로 → 중앙 합류
 - [x] SEC8 파이널 스프린트 — 시소+수직낙하(X=240) → FINISH 센서
 - [x] SEC7 상대좌표화 + SPLIT2 좌표 cascade 정합 — buildSEC7을 B=sec6ExitY 기준 상대좌표로 재작성, SPLIT2 진입/챔버/핀존/VORTEX/SPRINT 전체 S7=sec7ExitY 기준 재정렬, V5_FINISH_Y 5754→5954, V5_WORLD_H 6000→6200
+- [ ] V5 장애물 재설계 — windmill "타이밍 게이트" 패러다임 전환 (spokes↓ + angVel↓ + restitution↓, r 유지)
+- [ ] SEC7 카오스존 windmill 타이밍 게이트화 — spokes 4→2~3, angVel ±2.5→±1.0~1.5, restitution 0.4→0.15
+- [ ] SEC6 대형 윈드밀 고도화 — 이중 counter-rotating windmill(상단 CW + 하단 CCW) + 핀 추가
+- [ ] SPLIT2 분기 차별화 — SPRINT(급경사+windmill 2개=빠르고 위험) vs VORTEX(S커브+seesaw=느리고 안전), 역전 발판 구조
+- [ ] SEC1/SEC3 핀존 확대 — SEC1 벽 120→240px/핀 3→5행, SEC3 y범위 108→218px/핀 5→8행
 - [ ] 사다리타기: 복잡한 구조 + 카오스 이벤트 시스템
 - [ ] 파친코: 함정/변수 추가 + 단일 골 구조 + 공 개수 설정
 - [ ] NetworkManager — Supabase Realtime 호스트-게스트 실시간 통신
@@ -250,6 +255,8 @@ bash verify.sh
 
 | 날짜 | 분류 | 증상 | 원인 | 해결 |
 |---|---|---|---|---|
+| 2026-04-15 | 재설계 | SEC7/SPLIT2 windmill이 구슬을 영구 차단 — 파이프 내 windmill 통과 불가 | 파이프 GAP=120, windmill r=48 → 살대~벽 여유 12px vs 구슬 반지름 10px=2px 실질 여유, restitution=0.4로 구슬이 크게 튕겨나감 | windmill을 "타이밍 게이트"로 전환 — r 유지 + spokes 4→2~3 + angVel ±2.5→±1.0~1.5 + restitution 0.4→0.15 (살대 표면에서 미끄러지며 대기 → 열린 창에서 통과) |
+| 2026-04-15 | 재설계 | SPLIT2 VORTEX/SPRINT 경로 차이 없음 — 역전 발판 역할 불가 | 두 경로의 경로 길이·경사각·장애물 수가 사실상 동일 | SPRINT=급경사+windmill(r=48,spokes=2)×2(빠르고 위험), VORTEX=S커브+seesaw×2(느리고 안전)로 차별화 |
 | 2026-04-14 | 버그 수정 | SEC5→SEC6→SEC7 파이프 연결 꼬임 — 구슬 이탈/끼임으로 진행 불가 | SEC4 챔버 +200px 확장이 SEC5/SEC6 상대좌표로 전파됐으나 SEC7은 고정값(y=2894) 사용 → sec6ExitY(≈3094)보다 200px 위에 SEC7이 물리적으로 배치돼 중첩 충돌 | `buildSEC7` 전체를 `B=sec6ExitY` 기준 상대좌표로 재작성, `sec7ExitY` 필드 추가, `buildSPLIT2` 전체를 `S7=sec7ExitY` 기준으로 재정렬 |
 | 2026-04-12 | 버그 수정 | SEC5 원형 림으로 구슬 진입 불가 | 정적 ChainShape 루프(R=90)가 윈드밀 진입구를 완전 차단 | 원형 림 제거, SEC6을 박스+개방형 6-spoke 윈드밀로 재설계, 합류파이프가 박스 상단으로 직결 |
 | 2026-04-09 | 버그 수정 | SEC5 합류 교차점에서 구슬 통과 불가 | Curve2-F/S의 outer arc(R=90)가 수직파이프 내부(X=1370~1430)를 관통하며 물리 벽 형성 | `createPipe`에 `skipOuterWall` 옵션 추가, outer arc 제거 후 수평 마감벽(Y=fP2y-30)으로 상단 밀봉 |
